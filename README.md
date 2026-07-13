@@ -8,9 +8,7 @@ NutriCook AI is a full-stack nutrition coaching application that generates perso
 
 ## Live Demo
 
-**[https://saner108.github.io/nutricook-ai/](https://saner108.github.io/nutricook-ai/)**
-
-Paste your Anthropic API key in the top banner to enable AI recipe generation (the key lives in memory only — never stored or sent anywhere except api.anthropic.com).
+> Open the project in Claude.ai or deploy via Vercel/Netlify for a shareable link.
 
 ---
 
@@ -34,7 +32,6 @@ Paste your Anthropic API key in the top banner to enable AI recipe generation (t
 - 6 nutrition goal presets (Fat Loss, Muscle Gain, Maintenance, etc.)
 - 8 dietary preference toggles (Vegan, Gluten-Free, Keto, etc.)
 - Generates 3 personalized recipes with full nutrition info
-- **Live streaming**: recipes appear card-by-card as Claude writes them (SSE + incremental JSON parsing)
 - Animated macro bars per recipe
 - Step-by-step instructions
 
@@ -58,7 +55,7 @@ Paste your Anthropic API key in the top banner to enable AI recipe generation (t
 | Frontend | React 18 + Vite |
 | Styling | Inline styles (iOS design system) |
 | AI | Anthropic Claude API (claude-sonnet-4-6) |
-| Deployment | GitHub Pages (Actions CI: tests + build on every push) |
+| Deployment | Vercel / Netlify |
 
 ---
 
