@@ -92,6 +92,8 @@ When the app loads, you'll see a yellow banner at the top:
 
 > **Note:** The API key is stored in React state only — it is never saved to disk, localStorage, or any server. Each session requires re-entering the key. For a production deployment, move the API call to a backend server to keep your key secure.
 
+> **`artifacts/NutriCookAI_v2.tsx`** (the in-progress v2 build) already uses the backend-proxy approach: it calls `/api/generate` instead of the Anthropic API directly, so no key is ever entered in the browser. See the Vercel deployment section below for how that key is configured server-side.
+
 ---
 
 ## Deployment
@@ -101,6 +103,14 @@ When the app loads, you'll see a yellow banner at the top:
 npm install -g vercel
 vercel
 ```
+
+`api/generate.js` is a Vercel serverless function that proxies chat/vision requests to Anthropic, keeping the API key server-side. Set it in your Vercel project settings (Settings → Environment Variables):
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Redeploy after adding the variable. This is required for `artifacts/NutriCookAI_v2.tsx`'s AI Recipe Generator and Fridge Scan features to work in production.
 
 ### Netlify
 ```bash
