@@ -429,7 +429,7 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 {"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"steps":[""]}]}
 Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; 4-7 steps each; 3 recipes meaningfully different in cuisine or method.`;
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
