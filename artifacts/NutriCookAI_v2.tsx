@@ -35,6 +35,15 @@ const GROCERY = {
   "Dairy": [{ id:13, name:"Cottage Cheese", qty:"16 oz", done:false }, { id:14, name:"Almond Milk", qty:"½ gallon", done:false }],
 };
 
+const INGREDIENT_DB = [
+  "chicken", "chicken breast", "chicken thighs", "ground beef", "ground turkey", "steak", "salmon", "tuna", "shrimp", "cod", "tilapia", "pork chops", "bacon", "ham", "turkey", "tofu", "tempeh", "eggs", "egg whites",
+  "greek yogurt", "cottage cheese", "cheddar cheese", "mozzarella", "parmesan", "feta", "milk", "almond milk", "oat milk", "butter", "cream cheese", "sour cream",
+  "broccoli", "spinach", "kale", "bell peppers", "onion", "red onion", "garlic", "tomatoes", "cherry tomatoes", "carrots", "celery", "zucchini", "mushrooms", "asparagus", "green beans", "cauliflower", "sweet potato", "potatoes", "corn", "peas", "cucumber", "lettuce", "cabbage", "brussels sprouts", "eggplant", "avocado", "jalapeño", "ginger", "cilantro", "basil", "parsley", "green onions",
+  "rice", "brown rice", "jasmine rice", "quinoa", "oats", "pasta", "whole wheat pasta", "bread", "whole wheat bread", "tortillas", "couscous", "black beans", "chickpeas", "lentils", "kidney beans", "pinto beans",
+  "banana", "apple", "berries", "strawberries", "blueberries", "raspberries", "lemon", "lime", "orange", "mango", "pineapple", "grapes", "peach", "watermelon",
+  "olive oil", "coconut oil", "soy sauce", "honey", "maple syrup", "peanut butter", "almond butter", "almonds", "walnuts", "cashews", "peanuts", "chia seeds", "flax seeds", "hummus", "salsa", "coconut milk", "chicken broth", "tomato sauce", "protein powder", "dark chocolate",
+];
+
 const DIETARY_OPTS = ["Vegan","Vegetarian","Gluten-Free","Dairy-Free","Keto","Low-Carb","High-Protein","Nut-Free"];
 const GOAL_OPTS = ["Fat Loss","Muscle Gain","Maintenance","High Protein","Low Carb","Balanced"];
 
@@ -495,13 +504,29 @@ function AIScreen() {
     setInputVal("");
   };
   const handleKey = e => {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addIng(inputVal); }
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const t = inputVal.trim().toLowerCase();
+      addIng(t && !INGREDIENT_DB.includes(t) && suggestions.length ? suggestions[0] : inputVal);
+    }
     else if (e.key === "Backspace" && inputVal === "" && ingredients.length > 0) setIngredients(p => p.slice(0, -1));
   };
   const togglePref = id => setPrefs(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
+  const q = inputVal.trim().toLowerCase();
+  const suggestions = q
+    ? INGREDIENT_DB.filter(x => x.includes(q) && !ingredients.includes(x))
+        .sort((a, b) => (a.startsWith(q) ? 0 : 1) - (b.startsWith(q) ? 0 : 1))
+        .slice(0, 6)
+    : [];
+
   const generate = async () => {
-    if (!ingredients.length || loading) return;
+    if (loading) return;
+    if (!ingredients.length) {
+      setError("Add at least one ingredient first — start typing to search, tap a quick-add, or 📷 Scan Fridge.");
+      return;
+    }
+    setError(null);
     setLoading(true); setError(null); setRecipes([]); setStreamName(null);
     const prefStr = prefs.length ? `Dietary requirements (strictly follow): ${prefs.join(", ")}.` : "";
     const prompt = `You are a professional nutritionist and chef. Generate exactly 3 different recipes using primarily: ${ingredients.join(", ")}.
@@ -623,10 +648,25 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           ))}
           <input ref={inputRef} value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKey}
             onBlur={() => inputVal.trim() && addIng(inputVal)}
-            placeholder={!ingredients.length ? "e.g. chicken, broccoli, garlic..." : ""}
+            placeholder={!ingredients.length ? "Search ingredients — try 'chick'..." : ""}
             style={{ border: "none", outline: "none", background: "transparent", fontSize: 14, color: T.black, minWidth: 160, flex: 1, padding: "4px 0" }}
           />
         </div>
+        {/* Autocomplete suggestions */}
+        {suggestions.length > 0 && (
+          <div style={{ marginTop: 8, background: T.white, border: `1.5px solid ${T.g2}`, borderRadius: 14, overflow: "hidden", boxShadow: shadow.md }}>
+            {suggestions.map((s, i) => (
+              <button key={s} onMouseDown={e => e.preventDefault()} onClick={() => { addIng(s); inputRef.current?.focus(); }} style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "11px 14px",
+                border: "none", background: "transparent", cursor: "pointer", fontSize: 14, color: T.black,
+                borderBottom: i < suggestions.length - 1 ? `1px solid ${T.g1}` : "none",
+              }}>
+                <span style={{ color: T.mintDark, fontWeight: 800 }}>+</span>
+                <span>{s.startsWith(q) ? (<><strong>{s.slice(0, q.length)}</strong>{s.slice(q.length)}</>) : s}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {/* Quick adds */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
           {["chicken","rice","broccoli","eggs","avocado"].filter(i => !ingredients.includes(i)).map(s => (
@@ -636,7 +676,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             }}>+ {s}</button>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: type an ingredient and press Enter · or 📷 scan a photo of your fridge</div>
+        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: start typing to search · tap a match to add it · or 📷 scan a photo of your fridge</div>
       </div>
 
       {/* Goal selector */}
@@ -653,7 +693,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
       </div>
 
       {/* Dietary preferences */}
-      <div style={{ ...card, marginBottom: 20, padding: "16px" }}>
+      <div style={{ ...card, marginBottom: 14, padding: "16px" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Dietary Preferences</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
           {DIETARY_OPTS.map(p => {
@@ -671,8 +711,8 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
 
       {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "12px 16px", marginBottom: 14, color: T.error, fontSize: 13 }}>⚠️ {error}</div>}
 
-      <Btn label={ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredients)` : "Add ingredients to generate"} primary
-        onPress={!loading && ingredients.length ? generate : () => {}} style={{ width: "100%", opacity: !ingredients.length ? 0.5 : 1 }} />
+      <Btn label={loading ? "⏳ Generating..." : ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredients)` : "Add ingredients to generate"} primary
+        onPress={generate} style={{ width: "100%", opacity: !ingredients.length ? 0.6 : 1 }} />
     </div>
   );
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.2.0 — 2026-07-17
+
+### Added
+- **Ingredient autocomplete search.** Typing in the ingredient bar now searches a 120-item pantry database and shows a tap-to-add dropdown (matched prefix bolded, already-added items excluded). Pressing Enter on a partial match adds the top suggestion.
+
+### Improved
+- **Generate button always responds.** Tapping it with an empty pantry now shows a friendly hint (search, quick-add, or Scan Fridge) instead of doing nothing.
+- **Uniform AI-tab layout.** Consistent card spacing top to bottom.
+
+
 ## v2.1.0 — 2026-07-17
 
 ### Fixed
