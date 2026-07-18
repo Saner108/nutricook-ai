@@ -16,7 +16,9 @@ const USER = { name: "Cesar", goal: "Muscle Gain", weight: "175 lbs", target: "1
 const TARGETS = { kcal: 2200, protein: 165, carbs: 220, fat: 73, water: 8 };
 const CONSUMED = { kcal: 1380, protein: 98, carbs: 145, fat: 48, water: 5 };
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TODAY = 3;
+const NOW = new Date();
+const TODAY = (NOW.getDay() + 6) % 7; // Monday-first index of today
+const WEEK_DATES = DAYS.map((_, i) => { const d = new Date(NOW); d.setDate(NOW.getDate() - TODAY + i); return d.getDate(); });
 
 const MEALS = [
   { id:1, type:"Breakfast", name:"Egg & Avocado Toast", kcal:520, protein:28, carbs:42, fat:18, time:"8:30 AM", prep:"10 min", difficulty:"Easy", done:true, emoji:"🍳", confidence:96 },
@@ -136,6 +138,7 @@ function Btn({ label, onPress, primary, small, style: st }) {
 // ── Meal Card ────────────────────────────────────────────
 function MealCard({ meal, compact }) {
   const [open, setOpen] = useState(false);
+  const [fav, setFav] = useState(false);
   const diffColor = { Easy: T.success, Medium: T.warn, Hard: T.error }[meal.difficulty];
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 12 }}>
@@ -180,7 +183,7 @@ function MealCard({ meal, compact }) {
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn label="View Recipe" small onPress={() => setOpen(!open)} style={{ flex: 1 }} />
             <Btn label="Swap" small onPress={() => {}} style={{ flex: 1 }} />
-            <button style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: T.g1, cursor: "pointer", fontSize: 16 }}>♡</button>
+            <button onClick={() => setFav(f => !f)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: fav ? T.mintLight : T.g1, cursor: "pointer", fontSize: 16, color: fav ? T.error : T.g5, transition: "all 0.15s" }}>{fav ? "♥" : "♡"}</button>
           </div>
         )}
         {open && (
@@ -196,6 +199,7 @@ function MealCard({ meal, compact }) {
 // ── AI Recipe Result Card ─────────────────────────────────
 function AICard({ recipe, index }) {
   const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
   const diffColor = { Easy: T.success, Medium: T.warn, Hard: T.error }[recipe.difficulty] || T.success;
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 14, animation: `fadeUp 0.4s ease ${index * 0.12}s both` }}>
@@ -240,17 +244,88 @@ function AICard({ recipe, index }) {
           </ol>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <Btn label="Cook Now" primary onPress={() => {}} style={{ flex: 1 }} />
-          <Btn label="Save" onPress={() => {}} style={{ flex: 1 }} />
+          <Btn label="Cook Now" primary onPress={() => setOpen(true)} style={{ flex: 1 }} />
+          <Btn label={saved ? "✓ Saved" : "Save"} onPress={() => setSaved(s => !s)} style={{ flex: 1, color: saved ? T.mintDark : undefined, background: saved ? T.mintLight : undefined }} />
         </div>
       </div>
     </div>
   );
 }
 
+// ── Streaming helpers (pure; unit-tested in test/) ───────
+function extractRecipes(text) {
+  const start = text.indexOf("[");
+  const complete = [];
+  let partialName = null;
+  if (start === -1) return { complete, partialName };
+  let depth = 0, inStr = false, esc = false, objStart = -1;
+  for (let i = start + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { esc = false; continue; }
+    if (ch === "\\") { if (inStr) esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === "{") { if (depth === 0) objStart = i; depth++; }
+    else if (ch === "}") { depth--; if (depth === 0 && objStart !== -1) { try { complete.push(JSON.parse(text.slice(objStart, i + 1))); } catch {} objStart = -1; } }
+    else if (ch === "]" && depth === 0) break;
+  }
+  if (objStart !== -1) {
+    const frag = text.slice(objStart);
+    const m = frag.match(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (m) { try { partialName = JSON.parse('"' + m[1] + '"'); } catch { partialName = m[1]; } }
+  }
+  return { complete, partialName };
+}
+
+async function readSSEText(reader, onText) {
+  const decoder = new TextDecoder();
+  let buf = "", acc = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith("data:")) continue;
+      let evt;
+      try { evt = JSON.parse(t.slice(5).trim()); } catch { continue; }
+      if (evt.type === "message_stop") return acc;
+      const d = evt.delta;
+      if (evt.type === "content_block_delta" && d && d.type === "text_delta" && typeof d.text === "string") {
+        acc += d.text;
+        if (onText) onText(acc);
+      }
+    }
+  }
+  return acc;
+}
+
+async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
+  const doFetch = fetchFn || ((u, o) => fetch(u, o));
+  const res = await doFetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, stream: true, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!res.ok) throw new Error("Recipe service error");
+  const reader = res.body.getReader();
+  let full = await readSSEText(reader, text => {
+    if (onUpdate) onUpdate(extractRecipes(text));
+  });
+  full = full.replace(/```json|```/g, "").trim();
+  let recipes = null;
+  try { recipes = JSON.parse(full).recipes; } catch {}
+  if (!recipes || !recipes.length) recipes = extractRecipes(full).complete;
+  if (!recipes.length) throw new Error("No recipes in response");
+  return recipes;
+}
+
 // ── Screens ──────────────────────────────────────────────
 
-function HomeScreen() {
+function HomeScreen({ setTab }) {
+  const [water, setWater] = useState(CONSUMED.water);
   const rem = TARGETS.kcal - CONSUMED.kcal;
   const prot = CONSUMED.protein / TARGETS.protein;
   const carbs = CONSUMED.carbs / TARGETS.carbs;
@@ -261,7 +336,7 @@ function HomeScreen() {
       {/* Greeting */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 14, color: T.g4, fontWeight: 500 }}>Good afternoon,</div>
+          <div style={{ fontSize: 14, color: T.g4, fontWeight: 500 }}>{NOW.getHours() < 12 ? "Good morning," : NOW.getHours() < 18 ? "Good afternoon," : "Good evening,"}</div>
           <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>{USER.name} 👋</div>
         </div>
         <div style={{ width: 44, height: 44, borderRadius: 99, background: `linear-gradient(135deg, ${T.mintDark}, ${T.mint})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>💪</div>
@@ -285,11 +360,12 @@ function HomeScreen() {
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>💧 Water</span>
-            <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{CONSUMED.water}/{TARGETS.water} glasses</span>
+            <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{water}/{TARGETS.water} glasses</span>
           </div>
           <div style={{ display: "flex", gap: 5 }}>
             {Array(TARGETS.water).fill(0).map((_, i) => (
-              <div key={i} style={{ flex: 1, height: 8, borderRadius: 99, background: i < CONSUMED.water ? T.water : "rgba(255,255,255,0.15)" }} />
+              <div key={i} onClick={() => setWater(i + 1 === water ? i : i + 1)} title="Tap to log water"
+                style={{ flex: 1, height: 8, borderRadius: 99, cursor: "pointer", background: i < water ? T.water : "rgba(255,255,255,0.15)", transition: "background 0.2s" }} />
             ))}
           </div>
         </div>
@@ -302,8 +378,8 @@ function HomeScreen() {
           <div style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, marginBottom: 4 }}>AI Meal Planner</div>
           <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.5, marginBottom: 12 }}>Based on your goals and available ingredients, we've created today's meal plan.</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn label="Generate New Plan" primary small onPress={() => {}} style={{ fontSize: 12 }} />
-            <Btn label="Customize" small onPress={() => {}} style={{ fontSize: 12 }} />
+            <Btn label="Generate New Plan" primary small onPress={() => setTab("ai")} style={{ fontSize: 12 }} />
+            <Btn label="Customize" small onPress={() => setTab("ai")} style={{ fontSize: 12 }} />
           </div>
         </div>
       </div>
@@ -334,7 +410,7 @@ function MacroRow({ label, value, target, color }) {
   );
 }
 
-function PlanScreen() {
+function PlanScreen({ setTab }) {
   const [day, setDay] = useState(TODAY);
   const [expanded, setExpanded] = useState("Dinner");
   const types = ["Breakfast","Lunch","Dinner","Snack"];
@@ -350,7 +426,7 @@ function PlanScreen() {
             boxShadow: day === i ? shadow.md : shadow.sm, transition: "all 0.2s",
           }}>
             <div style={{ fontSize: 11, color: day === i ? T.mint : T.g4, fontWeight: 600, marginBottom: 4 }}>{d}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.white : T.black }}>{14 + i}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.white : T.black }}>{WEEK_DATES[i]}</div>
             {i === TODAY && day !== i && <div style={{ width: 5, height: 5, borderRadius: 99, background: T.mintDark, margin: "4px auto 0" }} />}
           </button>
         ))}
@@ -386,7 +462,7 @@ function PlanScreen() {
               <div style={{ ...card, marginTop: 6, padding: "20px", textAlign: "center" }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
                 <div style={{ fontSize: 14, color: T.g4 }}>No meal planned for this day.</div>
-                <Btn label="Generate with AI" primary small onPress={() => {}} style={{ marginTop: 12 }} />
+                <Btn label="Generate with AI" primary small onPress={() => setTab("ai")} style={{ marginTop: 12 }} />
               </div>
             )}
           </div>
@@ -404,8 +480,14 @@ function AIScreen() {
   const [goal, setGoal] = useState("Muscle Gain");
   const [loading, setLoading] = useState(false);
   const [recipes, setRecipes] = useState([]);
+  const [streamName, setStreamName] = useState(null);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
+  const fileRef = useRef(null);
+
+  // The Anthropic key lives server-side in /api/generate — never in the browser.
+  const apiKey = null;
 
   const addIng = val => {
     const t = val.trim().toLowerCase();
@@ -419,8 +501,8 @@ function AIScreen() {
   const togglePref = id => setPrefs(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const generate = async () => {
-    if (!ingredients.length) return;
-    setLoading(true); setError(null); setRecipes([]);
+    if (!ingredients.length || loading) return;
+    setLoading(true); setError(null); setRecipes([]); setStreamName(null);
     const prefStr = prefs.length ? `Dietary requirements (strictly follow): ${prefs.join(", ")}.` : "";
     const prompt = `You are a professional nutritionist and chef. Generate exactly 3 different recipes using primarily: ${ingredients.join(", ")}.
 Goal: ${goal}. ${prefStr}
@@ -428,22 +510,58 @@ You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do N
 Respond ONLY with valid JSON — no markdown, no explanation:
 {"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"steps":[""]}]}
 Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; 4-7 steps each; 3 recipes meaningfully different in cuisine or method.`;
+    setStep("results");
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      const all = await streamRecipes(apiKey, prompt, ({ complete, partialName }) => {
+        setRecipes(complete);
+        setStreamName(partialName);
       });
-      const data = await res.json();
-      const text = data.content.map(b => b.text || "").join("");
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      setRecipes(parsed.recipes || []);
-      setStep("results");
+      setRecipes(all);
+      setStreamName(null);
     } catch {
-      setError("Couldn't generate recipes. Try again.");
+      setStep("input");
+      setError("Couldn't generate recipes — please try again in a moment.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFridgePhoto = e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { setError("That photo is over 4MB — try a smaller or compressed one."); return; }
+    setScanning(true); setError(null);
+    const fr = new FileReader();
+    fr.onerror = () => { setScanning(false); setError("Couldn't read that photo — try another one."); };
+    fr.onload = async () => {
+      try {
+        const base64 = String(fr.result).split(",")[1];
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6", max_tokens: 300,
+            messages: [{ role: "user", content: [
+              { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: base64 } },
+              { type: "text", text: 'List only the food ingredients visible. Respond ONLY with JSON: {"ingredients":["item1","item2"]}' },
+            ] }],
+          }),
+        });
+        if (!res.ok) throw new Error("scan failed");
+        const data = await res.json();
+        const text = (data.content || []).map(b => b.text || "").join("");
+        const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+        const found = (parsed.ingredients || []).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+        if (!found.length) setError("No ingredients spotted — try a clearer, closer photo.");
+        else setIngredients(p => [...p, ...found.filter(f => !p.includes(f))]);
+      } catch {
+        setError("Fridge scan failed — please try again.");
+      } finally {
+        setScanning(false);
+      }
+    };
+    fr.readAsDataURL(file);
   };
 
   if (step === "results") return (
@@ -452,10 +570,25 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         <button onClick={() => setStep("input")} style={{ width: 36, height: 36, borderRadius: 99, background: T.g1, border: "none", cursor: "pointer", fontSize: 18 }}>←</button>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800, color: T.black, letterSpacing: -0.3 }}>Your Recipes</div>
-          <div style={{ fontSize: 12, color: T.g4 }}>{ingredients.slice(0, 3).join(", ")}{ingredients.length > 3 ? ` +${ingredients.length - 3} more` : ""}</div>
+          <div style={{ fontSize: 12, color: T.g4 }}>
+            {loading ? `Cooking up ideas for ${goal}…` : `${ingredients.slice(0, 3).join(", ")}${ingredients.length > 3 ? ` +${ingredients.length - 3} more` : ""}`}
+          </div>
         </div>
       </div>
       {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} />)}
+      {loading && recipes.length < 3 && (
+        <div style={{ ...card, border: `1.5px dashed ${T.mintMid}`, background: T.mintLight, marginBottom: 14, padding: "18px", animation: "fadeUp 0.4s ease both" }}>
+          {streamName ? (
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.mintDark, marginBottom: 6 }}>{streamName}</div>
+          ) : (
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.mintDark, marginBottom: 6 }}>Thinking…</div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 16, display: "inline-block", animation: "spin 2s linear infinite" }}>🌀</span>
+            <span style={{ fontSize: 13, color: T.g5 }}>Writing recipe {recipes.length + 1} of 3…</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -469,9 +602,14 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
 
       {/* Ingredient chips input */}
       <div style={{ ...card, padding: "16px", marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-          Your Ingredients <span style={{ color: T.g4, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— tap Enter to add</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>Your Ingredients</div>
+          <button onClick={() => !scanning && fileRef.current && fileRef.current.click()} style={{
+            border: `1.5px solid ${T.mintMid}`, background: T.mintLight, color: T.mintDark, borderRadius: 99,
+            padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: scanning ? 0.7 : 1,
+          }}>{scanning ? "⏳ Scanning…" : "📷 Scan Fridge"}</button>
         </div>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFridgePhoto} style={{ display: "none" }} />
         <div onClick={() => inputRef.current?.focus()} style={{
           minHeight: 54, border: `1.5px solid ${T.g2}`, borderRadius: 14, padding: "10px 14px",
           display: "flex", flexWrap: "wrap", gap: 7, alignItems: "flex-start", cursor: "text", background: T.g1,
@@ -498,6 +636,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             }}>+ {s}</button>
           ))}
         </div>
+        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: type an ingredient and press Enter · or 📷 scan a photo of your fridge</div>
       </div>
 
       {/* Goal selector */}
@@ -532,20 +671,11 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
 
       {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "12px 16px", marginBottom: 14, color: T.error, fontSize: 13 }}>⚠️ {error}</div>}
 
-      <Btn label={loading ? "⏳ Generating..." : ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredients)` : "Add ingredients to generate"} primary
+      <Btn label={ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredients)` : "Add ingredients to generate"} primary
         onPress={!loading && ingredients.length ? generate : () => {}} style={{ width: "100%", opacity: !ingredients.length ? 0.5 : 1 }} />
-
-      {loading && (
-        <div style={{ textAlign: "center", padding: "32px 0" }}>
-          <div style={{ fontSize: 40, marginBottom: 12, animation: "spin 2s linear infinite" }}>🌀</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.mintDark, marginBottom: 4 }}>Creating your recipes...</div>
-          <div style={{ fontSize: 13, color: T.g4 }}>Analyzing nutrition & personalizing for {goal}</div>
-        </div>
-      )}
     </div>
   );
 }
-
 function GroceryScreen() {
   const [checked, setChecked] = useState(() => {
     const init = {};
@@ -750,8 +880,8 @@ export default function NutriCookApp() {
 
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
-          {tab === "home" && <HomeScreen />}
-          {tab === "plan" && <PlanScreen />}
+          {tab === "home" && <HomeScreen setTab={setTab} />}
+          {tab === "plan" && <PlanScreen setTab={setTab} />}
           {tab === "ai" && <AIScreen />}
           {tab === "grocery" && <GroceryScreen />}
           {tab === "profile" && <ProfileScreen />}

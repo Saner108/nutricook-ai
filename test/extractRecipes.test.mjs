@@ -1,5 +1,5 @@
-// Tests the pure extractRecipes helper that lives inside src/App.jsx.
-// App.jsx contains JSX so it can't be imported by node directly; we lift the
+// Tests the pure extractRecipes helper that lives inside src/NutriCookAI_v2.tsx.
+// NutriCookAI_v2.tsx contains JSX so it can't be imported by node directly; we lift the
 // function's source text out and evaluate it. Run: node --test test/
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,19 +7,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 function loadFn(name) {
-  const src = readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8");
   const match = src.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
-  assert.ok(match, `${name} not found in App.jsx`);
+  assert.ok(match, `${name} not found in NutriCookAI_v2.tsx`);
   return new Function(`${match[0]}; return ${name};`)();
 }
 const loadExtractRecipes = () => loadFn("extractRecipes");
 
 // like loadFn but also pulls in helper functions the target calls
 function loadFnWith(name, deps) {
-  const src = readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8");
   const parts = [name, ...deps].map(n => {
     const m = src.match(new RegExp(`(?:async )?function ${n}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
-    assert.ok(m, `${n} not found in App.jsx`);
+    assert.ok(m, `${n} not found in NutriCookAI_v2.tsx`);
     return m[0];
   });
   return new Function(`${parts.join("\n")}; return ${name};`)();
@@ -79,14 +79,14 @@ test("streamRecipes: streams the request, reports progressive updates, resolves 
 // project deliberately doesn't carry. This source-level contract pins the
 // wiring: the AI screen must generate via the tested streamRecipes pipeline.
 test("generate flow: AIScreen delegates to streamRecipes and renders progressive updates", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8");
   assert.match(src, /await streamRecipes\(apiKey, prompt/, "generate must call streamRecipes");
   assert.match(src, /setStreamName\(partialName\)/, "streaming updates must drive the skeleton name");
   assert.doesNotMatch(src, /const data = await res\.json\(\);\s*if \(data\.error\)/, "old non-streaming fetch parsing must be gone");
 });
 
 test("results screen: skeleton card renders while streaming, showing partial recipe name", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8");
   assert.match(src, /loading && recipes\.length < 3 &&/, "skeleton must show only while streaming with recipes pending");
   assert.match(src, /\{streamName\}/, "skeleton must render the live partial recipe name");
 });
