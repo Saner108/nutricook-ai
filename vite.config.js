@@ -9,12 +9,15 @@ const MOCK_RECIPES = {
   recipes: [
     { name: "Garlic Chicken & Broccoli Stir-Fry", difficulty: "Easy", prepTime: "20 min", servings: 2,
       macros: { calories: 480, protein: 46, carbs: 28, fat: 20 },
+      ingredients: ["1 lb chicken breast", "2 cups broccoli florets", "3 cloves garlic", "2 tbsp soy sauce", "1 tbsp olive oil"],
       steps: ["Slice chicken into strips and season with salt.", "Heat oil in a wok over high heat.", "Sear chicken 4–5 min until golden.", "Add broccoli and garlic; stir-fry 3 min.", "Toss with a splash of soy sauce and serve."] },
     { name: "Cheesy Veggie Egg Scramble", difficulty: "Easy", prepTime: "12 min", servings: 2,
       macros: { calories: 380, protein: 28, carbs: 10, fat: 26 },
+      ingredients: ["6 eggs", "1 bell pepper", "1/2 cup cheddar cheese", "1 tbsp butter"],
       steps: ["Whisk eggs with a pinch of salt.", "Sauté diced peppers 2 min in butter.", "Pour in eggs; stir gently over low heat.", "Fold in cheddar until melted.", "Plate and finish with black pepper."] },
     { name: "Roasted Pepper Chicken Rice Bowl", difficulty: "Medium", prepTime: "30 min", servings: 2,
       macros: { calories: 560, protein: 42, carbs: 58, fat: 16 },
+      ingredients: ["2 chicken breasts", "1 cup jasmine rice", "2 bell peppers", "1 tbsp olive oil", "1 tsp paprika"],
       steps: ["Roast peppers at 425°F for 15 min.", "Cook rice per package directions.", "Pan-sear seasoned chicken 6 min per side.", "Slice chicken; assemble bowls over rice.", "Top with roasted peppers and a drizzle of oil.", "Season to taste and serve warm."] },
   ],
 };

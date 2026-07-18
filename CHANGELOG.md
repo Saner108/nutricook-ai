@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.3.0 — 2026-07-18
+
+### Plan
+- Rotating "Did you know?" nutrition fact card fills the space below Snack (changes with the selected day).
+
+### Grocery — reorganized
+- "What is this?" explainer header so the page purpose is obvious.
+- Saving an AI recipe now pushes its ingredients into the list under a "From Recipes" group (recipes now include shopping-list ingredients with quantities).
+- Add-your-own-item input with automatic category detection and duplicate protection.
+- Simpler layout: items to buy grouped flat by aisle, checked items sink to a "✓ In cart" section; celebration state when everything is bought.
+
+### Profile — rebuilt
+- Header: identity on the left, live weight-trend SVG chart on the right, with manual weight logging.
+- "My Goals" section header with lbs ⇄ kg unit toggle (converts weights everywhere).
+- Achievements redesigned as circular badges.
+- All five settings rows now open real pages: Notification Preferences (working toggles), Dietary Restrictions (synced with the AI Generator), Connected Apps (Apple Health / Garmin / Google Fit / MyFitnessPal interest stubs), Privacy Settings (written policy), Help & Support (FAQ accordion + contact).
+
+### Shared
+- App-level state: dietary prefs, units, weight log, and grocery list persist across tab switches.
+
+
 ## v2.2.0 — 2026-07-17
 
 ### Added
