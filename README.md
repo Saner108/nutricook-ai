@@ -181,3 +181,21 @@ Claude Corps Fellowship Applicant, Cohort 1
 ## License
 
 MIT — free to use, modify, and share.
+
+---
+
+## Environment Variables (Vercel → Project Settings)
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | For live AI | Powers recipe generation, fridge scan, and remixes via the `/api/generate` proxy. Never exposed to the browser. |
+| `STRIPE_SECRET_KEY` | Optional | Enables real Stripe Checkout for NutriCook Pro (use test-mode keys first). |
+| `STRIPE_PRICE_ID` | Optional | The recurring price for the $4.99/mo Pro subscription. |
+| `STRIPE_WEBHOOK_SECRET` | Optional | Verifies `api/stripe-webhook.js` events. |
+
+Without the Stripe keys, upgrading simulates instantly (demo mode). Without the Anthropic key, local dev serves realistic mocks.
+
+## Business Model
+
+Free tier: **3 recipe generations + 1 fridge scan per day** — enough to love the app.
+**NutriCook Pro ($4.99/mo):** unlimited generation, unlimited fridge scans, unlimited AI remixes until the next billing date. Checkout via Stripe subscription mode; webhook receives lifecycle events. (Per-user enforcement across devices requires auth + a datastore — the next phase.)

@@ -26,6 +26,11 @@ function devApiPlugin() {
   return {
     name: 'dev-api-generate',
     configureServer(server) {
+      server.middlewares.use('/api/checkout', (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end('{}'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ simulated: true }));
+      });
       server.middlewares.use('/api/generate', (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(JSON.stringify({ error: { message: 'Method not allowed' } })); return; }
         let raw = '';
@@ -60,6 +65,17 @@ function devApiPlugin() {
           }
           console.log('[mock] serving /api/generate (no ANTHROPIC_API_KEY set)');
           const msgs = Array.isArray(body.messages) ? body.messages : [];
+          const promptText = msgs.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
+          if (promptText.includes('Remix this recipe')) {
+            const instr = (promptText.match(/Instruction: ([^.]+)/) || [])[1] || '';
+            const label = instr.includes('spicier') ? 'Firecracker' : instr.includes('protein') ? 'Power Protein' : instr.includes('calories') ? 'Lean & Light' : instr.includes('servings') ? 'Family-Size' : 'Chef Swap';
+            const remixed = { name: `${label} Chicken Skillet`, difficulty: 'Easy', prepTime: '18 min', servings: 2,
+              macros: { calories: 430, protein: 48, carbs: 22, fat: 17 },
+              ingredients: ['1 lb chicken breast', '2 cups broccoli florets', '1 jalapeño, sliced', '2 tbsp hot sauce', '1 tbsp olive oil'],
+              steps: ['Slice chicken and season generously.', 'Sear in a hot skillet 5 min.', 'Add vegetables and aromatics; cook 4 min.', 'Finish with sauce and toss to coat.', 'Serve immediately.'] };
+            setTimeout(() => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(remixed) }] })); }, 700);
+            return;
+          }
           const isVision = msgs.some(m => Array.isArray(m.content) && m.content.some(c => c && c.type === 'image'));
           const payload = JSON.stringify(isVision ? MOCK_INGREDIENTS : MOCK_RECIPES);
           if (body.stream === true) {

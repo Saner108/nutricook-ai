@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.4.0 — 2026-07-18
+
+### NutriCook Pro — Stripe subscription (test-mode ready)
+- `api/checkout.js`: creates a Stripe Checkout Session (subscription mode, $4.99/mo) using STRIPE_SECRET_KEY + STRIPE_PRICE_ID; returns `{simulated:true}` when keys are absent so the flow demos end-to-end without a Stripe account.
+- `api/stripe-webhook.js`: signature-verified webhook for checkout.session.completed / customer.subscription.deleted (logs events; DB persistence is the documented next phase).
+- Paywall bottom sheet (T-token styled): unlimited generation, unlimited fridge scans, unlimited remixes, priority speed. `?upgraded=1` return URL activates Pro.
+- Free tier metering: 3 generations + 1 fridge scan per day (session-scoped; per-user enforcement requires auth + datastore). Live meter under the Generate button; exhausting quota opens the paywall — including on the Scan button itself. PRO badge in the status bar and on Profile; Upgrade banner on Profile for free users.
+
+### AI Recipe Remix agent
+- Every generated recipe card has a Remix row: 🌶 Spicier, 💪 More protein, 🔥 Fewer calories, x2 Servings, and 🔄 Swap ingredient (with inline input). Claude rewrites the recipe in the same JSON schema and the card updates in place with adjusted macros/ingredients/steps. Dev mock supports remixes offline.
+
+### Fixed
+- Scan quota was checked after the photo picker opened; the gate now fires on button tap.
+- "1 ingredients" grammar on the Generate button.
+
+### Docs
+- README: environment variable table (Anthropic + optional Stripe keys) and Business Model section.
+
+
 ## v2.3.0 — 2026-07-18
 
 ### Plan

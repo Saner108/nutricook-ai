@@ -221,9 +221,39 @@ function MealCard({ meal, compact }) {
 }
 
 // ── AI Recipe Result Card ─────────────────────────────────
-function AICard({ recipe, index, onSave }) {
+function AICard({ recipe, index, onSave, onReplace }) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [remixing, setRemixing] = useState(false);
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapVal, setSwapVal] = useState("");
+  const [remixErr, setRemixErr] = useState(null);
+
+  const remix = async instruction => {
+    if (remixing) return;
+    setRemixing(true); setRemixErr(null); setSwapMode(false);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6", max_tokens: 1200,
+          messages: [{ role: "user", content: `Remix this recipe: ${JSON.stringify(recipe)}. Instruction: ${instruction}. Keep it realistic and adjust macros accordingly. Respond ONLY with valid JSON of the exact same schema (single recipe object, no wrapper): {"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[""],"steps":[""]}` }],
+        }),
+      });
+      if (!res.ok) throw new Error("remix failed");
+      const data = await res.json();
+      const text = (data.content || []).map(b => b.text || "").join("");
+      const next = JSON.parse(text.replace(/```json|```/g, "").trim());
+      if (!next || !next.name || !next.macros) throw new Error("bad remix");
+      if (onReplace) onReplace(index, next);
+      setSaved(false);
+    } catch {
+      setRemixErr("Remix didn't come out right — try again.");
+    } finally {
+      setRemixing(false);
+    }
+  };
   const diffColor = { Easy: T.success, Medium: T.warn, Hard: T.error }[recipe.difficulty] || T.success;
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 14, animation: `fadeUp 0.4s ease ${index * 0.12}s both` }}>
@@ -279,6 +309,34 @@ function AICard({ recipe, index, onSave }) {
         {saved && recipe.ingredients && recipe.ingredients.length > 0 && (
           <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>🛒 Ingredients added to your Grocery list</div>
         )}
+        {/* AI Remix agent */}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.g1}` }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.g4, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+            {remixing ? "🌀 Remixing this recipe…" : "✨ Remix with AI"}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, opacity: remixing ? 0.5 : 1 }}>
+            {[["🌶 Spicier", "Make it noticeably spicier"], ["💪 More protein", "Increase the protein significantly"], ["🔥 Fewer calories", "Reduce the calories while keeping it satisfying"], ["x2 Servings", "Double the servings and scale ingredients"]].map(([label, instruction]) => (
+              <button key={label} onClick={() => remix(instruction)} disabled={remixing} style={{
+                padding: "6px 12px", borderRadius: 99, border: `1.5px solid ${T.g2}`, background: T.white,
+                color: T.g5, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>{label}</button>
+            ))}
+            <button onClick={() => setSwapMode(s => !s)} disabled={remixing} style={{
+              padding: "6px 12px", borderRadius: 99, border: `1.5px solid ${swapMode ? T.mintDark : T.g2}`, background: swapMode ? T.mintLight : T.white,
+              color: swapMode ? T.mintDark : T.g5, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>🔄 Swap ingredient</button>
+          </div>
+          {swapMode && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input value={swapVal} onChange={e => setSwapVal(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && swapVal.trim() && remix(`Swap out: ${swapVal.trim()}. Replace it with something that fits the recipe`)}
+                placeholder="What should we swap out? e.g. broccoli"
+                style={{ flex: 1, border: `1.5px solid ${T.g2}`, borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", background: T.g1, color: T.black }} />
+              <Btn small label="Swap" primary onPress={() => swapVal.trim() && remix(`Swap out: ${swapVal.trim()}. Replace it with something that fits the recipe`)} />
+            </div>
+          )}
+          {remixErr && <div style={{ fontSize: 12, color: T.error, marginTop: 8 }}>⚠️ {remixErr}</div>}
+        </div>
       </div>
     </div>
   );
@@ -509,7 +567,7 @@ function PlanScreen({ setTab }) {
   );
 }
 
-function AIScreen({ prefs, setPrefs, onSaveRecipe }) {
+function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPaywall }) {
   const [step, setStep] = useState("input"); // input | results
   const [ingredients, setIngredients] = useState([]);
   const [inputVal, setInputVal] = useState("");
@@ -553,6 +611,8 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe }) {
       setError("Add at least one ingredient first — start typing to search, tap a quick-add, or 📷 Scan Fridge.");
       return;
     }
+    if (!pro && usage.gen >= FREE_LIMITS.gen) { openPaywall(); return; }
+    useQuota("gen");
     setError(null);
     setLoading(true); setError(null); setRecipes([]); setStreamName(null);
     const prefStr = prefs.length ? `Dietary requirements (strictly follow): ${prefs.join(", ")}.` : "";
@@ -582,6 +642,8 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
+    if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; }
+    useQuota("scan");
     if (file.size > 4 * 1024 * 1024) { setError("That photo is over 4MB — try a smaller or compressed one."); return; }
     setScanning(true); setError(null);
     const fr = new FileReader();
@@ -627,7 +689,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           </div>
         </div>
       </div>
-      {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} onSave={onSaveRecipe} />)}
+      {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} onSave={onSaveRecipe} onReplace={(idx, next) => setRecipes(prev => prev.map((x, j) => j === idx ? next : x))} />)}
       {loading && recipes.length < 3 && (
         <div style={{ ...card, border: `1.5px dashed ${T.mintMid}`, background: T.mintLight, marginBottom: 14, padding: "18px", animation: "fadeUp 0.4s ease both" }}>
           {streamName ? (
@@ -656,7 +718,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
       <div style={{ ...card, padding: "16px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>Your Ingredients</div>
-          <button onClick={() => !scanning && fileRef.current && fileRef.current.click()} style={{
+          <button onClick={() => { if (scanning) return; if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; } if (fileRef.current) fileRef.current.click(); }} style={{
             border: `1.5px solid ${T.mintMid}`, background: T.mintLight, color: T.mintDark, borderRadius: 99,
             padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: scanning ? 0.7 : 1,
           }}>{scanning ? "⏳ Scanning…" : "📷 Scan Fridge"}</button>
@@ -738,8 +800,14 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
 
       {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "12px 16px", marginBottom: 14, color: T.error, fontSize: 13 }}>⚠️ {error}</div>}
 
-      <Btn label={loading ? "⏳ Generating..." : ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredients)` : "Add ingredients to generate"} primary
+      <Btn label={loading ? "⏳ Generating..." : ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredient${ingredients.length > 1 ? "s" : ""})` : "Add ingredients to generate"} primary
         onPress={generate} style={{ width: "100%", opacity: !ingredients.length ? 0.6 : 1 }} />
+      {!pro && (
+        <div style={{ textAlign: "center", fontSize: 12, color: T.g4, marginTop: 10 }}>
+          {Math.max(0, FREE_LIMITS.gen - usage.gen)} of {FREE_LIMITS.gen} free generations · {Math.max(0, FREE_LIMITS.scan - usage.scan)} of {FREE_LIMITS.scan} free scan left today{" "}
+          <span onClick={openPaywall} style={{ color: T.mintDark, fontWeight: 700, cursor: "pointer" }}>· Go Pro ♾️</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -860,7 +928,7 @@ function WeightChart({ data }) {
   );
 }
 
-function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs }) {
+function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall }) {
   const [sub, setSub] = useState(null);
   const [logVal, setLogVal] = useState("");
   const [notif, setNotif] = useState({ "Meal Reminders": true, "Water Reminders": true, "Weekly Progress Report": false, "Streak Alerts": true, "AI Recipe Suggestions": true });
@@ -989,7 +1057,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs }
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ flexShrink: 0, textAlign: "center" }}>
             <div style={{ width: 64, height: 64, borderRadius: 99, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 8px" }}>💪</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: T.white }}>{USER.name}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.white }}>{USER.name}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#0E2A1C", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
             <div style={{ display: "inline-block", background: "rgba(168,245,211,0.2)", borderRadius: 99, padding: "3px 10px", marginTop: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>🎯 {USER.goal}</span>
             </div>
@@ -1066,9 +1134,52 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs }
         ))}
       </div>
 
+      {!pro && (
+        <div onClick={openPaywall} style={{ ...card, marginBottom: 14, padding: "14px 18px", background: `linear-gradient(135deg, #0E2A1C 0%, #1A8C5F 100%)`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: T.white }}>🌿 Upgrade to NutriCook Pro</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>Unlimited recipes, scans & remixes — $4.99/mo</div>
+          </div>
+          <span style={{ color: T.mint, fontSize: 18 }}>›</span>
+        </div>
+      )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.3</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.4</div>
         <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude AI</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Paywall ──────────────────────────────────────────────
+const FREE_LIMITS = { gen: 3, scan: 1 };
+
+function Paywall({ onClose, onUpgrade, busy }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 50, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", background: T.white, borderRadius: "24px 24px 0 0", padding: "24px 22px 28px", animation: "fadeUp 0.3s ease both" }}>
+        <div style={{ width: 40, height: 4, borderRadius: 99, background: T.g2, margin: "0 auto 18px" }} />
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 34, marginBottom: 6 }}>🌿</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: T.black, letterSpacing: -0.3 }}>NutriCook Pro</div>
+          <div style={{ fontSize: 14, color: T.g4, marginTop: 4 }}>You've used your free portions for today</div>
+        </div>
+        <div style={{ background: T.mintLight, border: `1.5px solid ${T.mint}`, borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
+          {[
+            ["♾️", "Unlimited AI recipe generation"],
+            ["📷", "Unlimited fridge scans to your pantry"],
+            ["🌶", "Unlimited recipe remixes"],
+            ["⚡", "Priority generation speed"],
+          ].map(([e, t]) => (
+            <div key={t} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0" }}>
+              <span style={{ fontSize: 16 }}>{e}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: T.g6 }}>{t}</span>
+            </div>
+          ))}
+        </div>
+        <Btn label={busy ? "⏳ Opening checkout…" : "Start Pro — $4.99/mo"} primary onPress={busy ? () => {} : onUpgrade} style={{ width: "100%", marginBottom: 10 }} />
+        <button onClick={onClose} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, color: T.g4, padding: "8px" }}>Maybe later</button>
+        <div style={{ fontSize: 11, color: T.g4, textAlign: "center", marginTop: 6 }}>Unlimited until your next billing date. Cancel anytime.</div>
       </div>
     </div>
   );
@@ -1127,6 +1238,30 @@ export default function NutriCookApp() {
   const [units, setUnits] = useState("imperial");
   const [weights, setWeights] = useState(WEIGHT_SEED);
   const [groceryItems, setGroceryItems] = useState(() => Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ ...i, cat }))));
+  const [pro, setPro] = useState(false);
+  const [usage, setUsage] = useState({ gen: 0, scan: 0 });
+  const [paywall, setPaywall] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("upgraded") === "1") {
+      setPro(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+  const useQuota = kind => setUsage(u => ({ ...u, [kind]: u[kind] + 1 }));
+  const startCheckout = async () => {
+    setCheckoutBusy(true);
+    try {
+      const res = await fetch("/api/checkout", { method: "POST" });
+      const d = await res.json();
+      if (d.url) { window.location.href = d.url; return; }
+    } catch {}
+    // Simulated mode (no Stripe keys configured): activate Pro directly.
+    setPro(true);
+    setPaywall(false);
+    setCheckoutBusy(false);
+  };
   const saveRecipeToGrocery = recipe => setGroceryItems(p => {
     const have = p.map(x => x.name.toLowerCase());
     const add = (recipe.ingredients || [])
@@ -1153,19 +1288,20 @@ export default function NutriCookApp() {
         <div style={{ background: T.white, padding: "12px 20px 8px", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, color: T.black, borderBottom: `1px solid ${T.g1}` }}>
           <span>9:41</span>
           <span style={{ fontSize: 11, color: T.mintDark, fontWeight: 700, letterSpacing: 0.5 }}>NUTRICOOK AI</span>
-          <span>● ● ▮</span>
+          {pro ? <span style={{ background: T.mintDark, color: T.white, borderRadius: 99, padding: "1px 8px", fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>PRO</span> : <span>● ● ▮</span>}
         </div>
 
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
           {tab === "home" && <HomeScreen setTab={setTab} />}
           {tab === "plan" && <PlanScreen setTab={setTab} />}
-          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={saveRecipeToGrocery} />}
+          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={saveRecipeToGrocery} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} />}
-          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} />}
+          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} />}
         </div>
 
         <BottomNav tab={tab} setTab={setTab} />
+        {paywall && <Paywall onClose={() => setPaywall(false)} onUpgrade={startCheckout} busy={checkoutBusy} />}
       </div>
     </>
   );
