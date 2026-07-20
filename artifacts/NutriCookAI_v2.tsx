@@ -27,6 +27,30 @@ const MEALS = [
   { id:4, type:"Dinner", name:"Salmon & Quinoa", kcal:680, protein:48, carbs:52, fat:22, time:"7:00 PM", prep:"30 min", difficulty:"Medium", done:false, emoji:"🐟", confidence:98 },
 ];
 
+
+// Deterministic meal history — same past day always shows the same meals.
+const MEAL_POOL = [
+  { name:"Veggie Omelette & Sourdough", emoji:"🍳", kcal:440, protein:27, carbs:36, fat:20, prep:"12 min", difficulty:"Easy" },
+  { name:"Turkey & Sweet Potato Skillet", emoji:"🥔", kcal:610, protein:44, carbs:54, fat:22, prep:"25 min", difficulty:"Medium" },
+  { name:"Overnight Oats & Berries", emoji:"🍚", kcal:390, protein:22, carbs:58, fat:9, prep:"5 min", difficulty:"Easy" },
+  { name:"Beef & Broccoli Rice Bowl", emoji:"🥣", kcal:650, protein:46, carbs:62, fat:21, prep:"30 min", difficulty:"Medium" },
+  { name:"Cottage Cheese & Pineapple", emoji:"🍍", kcal:210, protein:24, carbs:20, fat:4, prep:"2 min", difficulty:"Easy" },
+  { name:"Lemon Herb Cod & Couscous", emoji:"🐟", kcal:540, protein:42, carbs:48, fat:16, prep:"25 min", difficulty:"Medium" },
+  { name:"Peanut Butter Banana Toast", emoji:"🍌", kcal:340, protein:14, carbs:44, fat:14, prep:"5 min", difficulty:"Easy" },
+  { name:"Chicken Fajita Wraps", emoji:"🌮", kcal:590, protein:41, carbs:56, fat:19, prep:"20 min", difficulty:"Easy" },
+  { name:"Tofu Veggie Stir-Fry", emoji:"🥘", kcal:480, protein:28, carbs:46, fat:20, prep:"18 min", difficulty:"Easy" },
+  { name:"Protein Smoothie Bowl", emoji:"🥤", kcal:320, protein:30, carbs:38, fat:7, prep:"5 min", difficulty:"Easy" },
+];
+function historyFor(offsetDays) {
+  const slots = ["Breakfast", "Lunch", "Dinner", "Snack"];
+  const out = {};
+  slots.forEach((slot, slotIndex) => {
+    const idx = Math.abs(offsetDays * 7 + slotIndex * 3) % MEAL_POOL.length;
+    out[slot] = { ...MEAL_POOL[idx], id: `h${offsetDays}-${slotIndex}`, type: slot, done: true, time: "", confidence: 90 + (idx % 9) };
+  });
+  return out;
+}
+
 const GROCERY = {
   "Proteins": [{ id:1, name:"Chicken Breast", qty:"2 lbs", done:true }, { id:2, name:"Salmon Fillet", qty:"12 oz", done:false }, { id:3, name:"Greek Yogurt", qty:"32 oz", done:true }, { id:4, name:"Eggs", qty:"12 count", done:false }],
   "Vegetables": [{ id:5, name:"Broccoli", qty:"1 head", done:true }, { id:6, name:"Baby Spinach", qty:"5 oz", done:false }, { id:7, name:"Bell Peppers", qty:"3 mixed", done:false }],
@@ -160,9 +184,10 @@ function Btn({ label, onPress, primary, small, style: st }) {
 }
 
 // ── Meal Card ────────────────────────────────────────────
-function MealCard({ meal, compact }) {
+function MealCard({ meal, compact, isFav, onFav }) {
   const [open, setOpen] = useState(false);
-  const [fav, setFav] = useState(false);
+  const [localFav, setLocalFav] = useState(false);
+  const fav = onFav ? !!isFav : localFav; // controlled when wired to app-level favorites
   const diffColor = { Easy: T.success, Medium: T.warn, Hard: T.error }[meal.difficulty];
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 12 }}>
@@ -207,11 +232,11 @@ function MealCard({ meal, compact }) {
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn label="View Recipe" small onPress={() => setOpen(!open)} style={{ flex: 1 }} />
             <Btn label="Swap" small onPress={() => {}} style={{ flex: 1 }} />
-            <button onClick={() => setFav(f => !f)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: fav ? T.mintLight : T.g1, cursor: "pointer", fontSize: 16, color: fav ? T.error : T.g5, transition: "all 0.15s" }}>{fav ? "♥" : "♡"}</button>
+            <button onClick={() => (onFav ? onFav(meal) : setLocalFav(f => !f))} style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: fav ? T.mintLight : T.g1, cursor: "pointer", fontSize: 16, color: fav ? T.error : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>{fav ? "♥" : "♡"}</button>
           </div>
         )}
         {open && (
-          <div style={{ marginTop: 12, padding: "12px", background: T.mintLight, borderRadius: 12, fontSize: 13, color: T.g6, lineHeight: 1.7 }}>
+          <div style={{ marginTop: 12, padding: "12px", background: T.mintLight, borderRadius: 12, fontSize: 13, color: T.g6, lineHeight: 1.7, animation: "popIn .25s ease both" }}>
             <strong>Steps:</strong> Heat pan over medium heat. Add oil and cook ingredients for 5–7 minutes. Season to taste. Plate and serve immediately. Enjoy your {meal.name}!
           </div>
         )}
@@ -293,7 +318,7 @@ function AICard({ recipe, index, onSave, onReplace }) {
           <span style={{ fontSize: 10, transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
         </button>
         {open && (
-          <ol style={{ margin: "12px 0 0", padding: 0 }}>
+          <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
             {recipe.steps.map((s, i) => (
               <li key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                 <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.white, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i+1}</span>
@@ -307,7 +332,7 @@ function AICard({ recipe, index, onSave, onReplace }) {
           <Btn label={saved ? "✓ Saved" : "Save"} onPress={() => { if (!saved && onSave) onSave(recipe); setSaved(s => !s); }} style={{ flex: 1, color: saved ? T.mintDark : undefined, background: saved ? T.mintLight : undefined }} />
         </div>
         {saved && recipe.ingredients && recipe.ingredients.length > 0 && (
-          <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>🛒 Ingredients added to your Grocery list</div>
+          <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>Saved to Want-to-Try · 🛒 ingredients added to Grocery</div>
         )}
         {/* AI Remix agent */}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.g1}` }}>
@@ -414,7 +439,7 @@ async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
 
 // ── Screens ──────────────────────────────────────────────
 
-function HomeScreen({ setTab }) {
+function HomeScreen({ setTab, favorites, toggleFavorite }) {
   const [water, setWater] = useState(CONSUMED.water);
   const rem = TARGETS.kcal - CONSUMED.kcal;
   const prot = CONSUMED.protein / TARGETS.protein;
@@ -433,7 +458,7 @@ function HomeScreen({ setTab }) {
       </div>
 
       {/* Progress Card */}
-      <div style={{ ...card, background: `linear-gradient(140deg, #0E2A1C 0%, #1A5C3A 60%, #1E8C5F 100%)`, marginBottom: 14, padding: "22px 20px" }}>
+      <div style={{ ...card, background: `linear-gradient(140deg, #0E2A1C 0%, #1A5C3A 60%, #1E8C5F 100%)`, marginBottom: 14, padding: "22px 20px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's Progress</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Ring pct={CONSUMED.kcal / TARGETS.kcal} color={T.mint} size={120} stroke={10}>
@@ -462,7 +487,7 @@ function HomeScreen({ setTab }) {
       </div>
 
       {/* AI Banner */}
-      <div style={{ ...card, background: T.mintLight, border: `1.5px solid ${T.mint}`, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 18px" }}>
+      <div style={{ ...card, background: T.mintLight, border: `1.5px solid ${T.mint}`, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 18px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: "0.06s" }}>
         <div style={{ fontSize: 28, lineHeight: 1 }}>🌿</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, marginBottom: 4 }}>AI Meal Planner</div>
@@ -476,7 +501,11 @@ function HomeScreen({ setTab }) {
 
       {/* Today's Meals */}
       <div style={{ fontSize: 18, fontWeight: 700, color: T.black, marginBottom: 12 }}>Today's Meals</div>
-      {MEALS.map(m => <MealCard key={m.id} meal={m} />)}
+      {MEALS.map((m, i) => (
+        <div key={m.id} style={{ animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: `${(i + 2) * 0.06}s` }}>
+          <MealCard meal={m} isFav={favorites.some(f => f.name === m.name)} onFav={toggleFavorite} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -500,31 +529,73 @@ function MacroRow({ label, value, target, color }) {
   );
 }
 
-function PlanScreen({ setTab }) {
+function PlanScreen({ setTab, favorites, toggleFavorite }) {
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week … -3 = 3 weeks ago
   const [day, setDay] = useState(TODAY);
   const [expanded, setExpanded] = useState("Dinner");
   const types = ["Breakfast","Lunch","Dinner","Snack"];
+  const weekDates = DAYS.map((_, i) => { const d = new Date(NOW); d.setDate(NOW.getDate() - TODAY + i + weekOffset * 7); return d; });
+  const fmt = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const weekLabel = ["This Week", "Last Week", "2 Weeks Ago", "3 Weeks Ago"][-weekOffset];
+  const offsetDays = weekOffset * 7 + (day - TODAY);
+  const isToday = weekOffset === 0 && day === TODAY;
+  const isPast = offsetDays < 0;
+  const history = isPast ? historyFor(offsetDays) : null;
+  const histTotals = history ? types.reduce((a, t) => ({ kcal: a.kcal + history[t].kcal, protein: a.protein + history[t].protein, carbs: a.carbs + history[t].carbs, fat: a.fat + history[t].fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : null;
+  const pagerBtn = enabled => ({
+    width: 32, height: 32, borderRadius: 99, border: "none", background: T.white, boxShadow: shadow.sm,
+    cursor: enabled ? "pointer" : "default", fontSize: 16, fontWeight: 700, color: T.g6,
+    opacity: enabled ? 1 : 0.35, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  });
   return (
     <div style={{ padding: "16px" }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color: T.black, marginBottom: 16, letterSpacing: -0.3 }}>Weekly Plan</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: T.black, marginBottom: 12, letterSpacing: -0.3 }}>Weekly Plan</div>
+      {/* Week pager */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <button onClick={() => weekOffset > -3 && setWeekOffset(o => o - 1)} style={pagerBtn(weekOffset > -3)}>‹</button>
+        <div style={{ flex: 1, textAlign: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: T.black }}>{weekLabel}</div>
+          <div style={{ fontSize: 11, color: T.g4, marginTop: 1 }}>{fmt(weekDates[0])} – {fmt(weekDates[6])}</div>
+        </div>
+        <button onClick={() => weekOffset < 0 && setWeekOffset(o => o + 1)} style={pagerBtn(weekOffset < 0)}>›</button>
+      </div>
       {/* Week strip */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
         {DAYS.map((d, i) => (
           <button key={d} onClick={() => setDay(i)} style={{
             flexShrink: 0, width: 48, padding: "10px 0", borderRadius: 14, border: "none", cursor: "pointer",
-            background: day === i ? T.mintDark : i === TODAY ? T.mintLight : T.white,
-            boxShadow: day === i ? shadow.md : shadow.sm, transition: "all 0.2s",
+            background: day === i ? T.mintDark : weekOffset === 0 && i === TODAY ? T.mintLight : T.white,
+            boxShadow: day === i ? shadow.md : shadow.sm, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
           }}>
             <div style={{ fontSize: 11, color: day === i ? T.mint : T.g4, fontWeight: 600, marginBottom: 4 }}>{d}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.white : T.black }}>{WEEK_DATES[i]}</div>
-            {i === TODAY && day !== i && <div style={{ width: 5, height: 5, borderRadius: 99, background: T.mintDark, margin: "4px auto 0" }} />}
+            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.white : T.black }}>{weekDates[i].getDate()}</div>
+            {weekOffset === 0 && i === TODAY && day !== i && <div style={{ width: 5, height: 5, borderRadius: 99, background: T.mintDark, margin: "4px auto 0" }} />}
           </button>
         ))}
       </div>
+      {/* Daily summary for past days */}
+      {isPast && (
+        <div style={{ ...card, marginBottom: 12, padding: "16px 18px", animation: "popIn .25s ease both" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>📒 Daily Summary</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: histTotals.kcal <= TARGETS.kcal ? T.mintDark : T.warn }}>{histTotals.kcal} / {TARGETS.kcal} kcal</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["Protein", histTotals.protein, T.protein], ["Carbs", histTotals.carbs, T.carbs], ["Fat", histTotals.fat, T.fat]].map(([l, v, c]) => (
+              <div key={l} style={{ flex: 1, background: T.g1, borderRadius: 10, padding: "8px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: c }}>{v}g</div>
+                <div style={{ fontSize: 10, color: T.g4, fontWeight: 500 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Meals accordion */}
       {types.map(type => {
-        const meal = MEALS.find(m => m.type === type) || MEALS[0];
+        const meal = isPast ? history[type] : (MEALS.find(m => m.type === type) || MEALS[0]);
         const isOpen = expanded === type;
+        const planned = isToday || isPast;
         return (
           <div key={type} style={{ marginBottom: 10 }}>
             <button onClick={() => setExpanded(isOpen ? null : type)} style={{
@@ -532,24 +603,24 @@ function PlanScreen({ setTab }) {
               display: "flex", justifyContent: "space-between", alignItems: "center",
             }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 20 }}>{meal.emoji}</span>
+                <span style={{ fontSize: 20 }}>{planned ? meal.emoji : "✨"}</span>
                 <div style={{ textAlign: "left" }}>
                   <div style={{ fontSize: 11, color: T.g4, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8 }}>{type}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>{day === TODAY ? meal.name : "Not planned"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>{planned ? meal.name : "Not planned"}</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {day === TODAY && <span style={{ fontSize: 13, fontWeight: 700, color: T.g4 }}>{meal.kcal} kcal</span>}
+                {planned && <span style={{ fontSize: 13, fontWeight: 700, color: T.g4 }}>{meal.kcal} kcal</span>}
                 <span style={{ fontSize: 12, color: T.g4, transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
               </div>
             </button>
-            {isOpen && day === TODAY && (
-              <div style={{ marginTop: 6 }}>
-                <MealCard meal={meal} />
+            {isOpen && planned && (
+              <div style={{ marginTop: 6, animation: "popIn .25s ease both" }}>
+                <MealCard meal={meal} isFav={favorites.some(f => f.name === meal.name)} onFav={toggleFavorite} />
               </div>
             )}
-            {isOpen && day !== TODAY && (
-              <div style={{ ...card, marginTop: 6, padding: "20px", textAlign: "center" }}>
+            {isOpen && !planned && (
+              <div style={{ ...card, marginTop: 6, padding: "20px", textAlign: "center", animation: "popIn .25s ease both" }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
                 <div style={{ fontSize: 14, color: T.g4 }}>No meal planned for this day.</div>
                 <Btn label="Generate with AI" primary small onPress={() => setTab("ai")} style={{ marginTop: 12 }} />
@@ -743,7 +814,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         </div>
         {/* Autocomplete suggestions */}
         {suggestions.length > 0 && (
-          <div style={{ marginTop: 8, background: T.white, border: `1.5px solid ${T.g2}`, borderRadius: 14, overflow: "hidden", boxShadow: shadow.md }}>
+          <div style={{ marginTop: 8, background: T.white, border: `1.5px solid ${T.g2}`, borderRadius: 14, overflow: "hidden", boxShadow: shadow.md, animation: "popIn .25s ease both" }}>
             {suggestions.map((s, i) => (
               <button key={s} onMouseDown={e => e.preventDefault()} onClick={() => { addIng(s); inputRef.current?.focus(); }} style={{
                 display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "11px 14px",
@@ -762,6 +833,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             <button key={s} onClick={() => setIngredients(p => [...p, s])} style={{
               padding: "5px 12px", borderRadius: 99, border: `1.5px dashed ${T.g3}`,
               background: "transparent", color: T.g4, fontSize: 12, cursor: "pointer", fontWeight: 500,
+              transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
             }}>+ {s}</button>
           ))}
         </div>
@@ -775,7 +847,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           {GOAL_OPTS.map(g => (
             <button key={g} onClick={() => setGoal(g)} style={{
               padding: "8px 14px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-              background: goal === g ? T.mintDark : T.g1, color: goal === g ? T.white : T.g5, transition: "all 0.15s",
+              background: goal === g ? T.mintDark : T.g1, color: goal === g ? T.white : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
             }}>{g}</button>
           ))}
         </div>
@@ -791,7 +863,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
               <button key={p} onClick={() => togglePref(p)} style={{
                 padding: "7px 14px", borderRadius: 99, cursor: "pointer", fontSize: 13, fontWeight: 500,
                 border: active ? `2px solid ${T.mintDark}` : `1.5px solid ${T.g2}`,
-                background: active ? T.mintLight : T.white, color: active ? T.mintDark : T.g4, transition: "all 0.15s",
+                background: active ? T.mintLight : T.white, color: active ? T.mintDark : T.g4, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
               }}>{active ? "✓ " : ""}{p}</button>
             );
           })}
@@ -825,7 +897,7 @@ function guessCategory(name) {
 function GroceryRow({ item, onToggle }) {
   return (
     <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.g1}`, cursor: "pointer" }}>
-      <div style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.done ? T.mintDark : T.g3}`, background: item.done ? T.mintDark : T.white, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
+      <div style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.done ? T.mintDark : T.g3}`, background: item.done ? T.mintDark : T.white, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>
         {item.done && <span style={{ color: T.white, fontSize: 13, fontWeight: 700 }}>✓</span>}
       </div>
       <div style={{ flex: 1 }}>
@@ -875,7 +947,7 @@ function GroceryScreen({ items, setItems }) {
         <Btn label="+ Add" primary small onPress={addItem} style={{ padding: "10px 18px" }} />
       </div>
       {cats.map(cat => (
-        <div key={cat} style={{ ...card, marginBottom: 10, padding: "12px 18px" }}>
+        <div key={cat} style={{ ...card, marginBottom: 10, padding: "12px 18px", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0 2px" }}>
             <span style={{ fontSize: 16 }}>{CAT_EMOJI[cat]}</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>{cat}</span>
@@ -890,7 +962,7 @@ function GroceryScreen({ items, setItems }) {
         </div>
       )}
       {inCart.length > 0 && (
-        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: T.mintLight }}>
+        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: T.mintLight, animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1, padding: "4px 0 2px" }}>✓ In cart ({inCart.length})</div>
           {inCart.map(i => <GroceryRow key={i.id} item={i} onToggle={() => toggle(i.id)} />)}
         </div>
@@ -928,12 +1000,13 @@ function WeightChart({ data }) {
   );
 }
 
-function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall }) {
+function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall, favorites, setFavorites, tryList, setTryList }) {
   const [sub, setSub] = useState(null);
   const [logVal, setLogVal] = useState("");
   const [notif, setNotif] = useState({ "Meal Reminders": true, "Water Reminders": true, "Weekly Progress Report": false, "Streak Alerts": true, "AI Recipe Suggestions": true });
   const [connected, setConnected] = useState({});
   const [faqOpen, setFaqOpen] = useState(null);
+  const [tryOpen, setTryOpen] = useState(null);
 
   const lbs = weights[weights.length - 1].w;
   const disp = v => units === "metric" ? `${Math.round(v * 0.45359 * 10) / 10} kg` : `${Math.round(v * 10) / 10} lbs`;
@@ -977,7 +1050,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                   <button key={o} onClick={() => setPrefs(prev => prev.includes(o) ? prev.filter(x => x !== o) : [...prev, o])} style={{
                     padding: "7px 14px", borderRadius: 99, cursor: "pointer", fontSize: 13, fontWeight: 500,
                     border: active ? `2px solid ${T.mintDark}` : `1.5px solid ${T.g2}`,
-                    background: active ? T.mintLight : T.white, color: active ? T.mintDark : T.g4, transition: "all 0.15s",
+                    background: active ? T.mintLight : T.white, color: active ? T.mintDark : T.g4, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
                   }}>{active ? "✓ " : ""}{o}</button>
                 );
               })}
@@ -1029,7 +1102,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                   <span>{q}</span>
                   <span style={{ color: T.g4, fontSize: 11, transform: faqOpen === q ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>▼</span>
                 </button>
-                {faqOpen === q && <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.6, paddingBottom: 14 }}>{a}</div>}
+                {faqOpen === q && <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.6, paddingBottom: 14, animation: "popIn .25s ease both" }}>{a}</div>}
               </div>
             ))}
           </div>
@@ -1038,6 +1111,76 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
             <div style={{ fontSize: 14, fontWeight: 700, color: T.mintDark }}>support@nutricook.ai</div>
           </div>
         </div>
+      )}
+      {sub === "Favorite Dishes" && (
+        favorites.length === 0 ? (
+          <div style={{ ...card, textAlign: "center", padding: "32px 20px" }}>
+            <div style={{ fontSize: 28, marginBottom: 8, color: T.g3 }}>♡</div>
+            <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.6 }}>No favorites yet — tap the ♡ on any meal.</div>
+          </div>
+        ) : (
+          favorites.map((f, i) => (
+            <div key={f.name} style={{ ...card, padding: "14px 18px", marginBottom: 10, display: "flex", alignItems: "center", gap: 12, animation: "slideUp .35s cubic-bezier(.22,.68,0,1) both", animationDelay: `${i * 0.05}s` }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{f.emoji}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.black, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.black }}>{f.kcal} kcal</span>
+                  <Pill text={`P ${f.protein}g`} color={T.protein} bg={T.g1} size={10} />
+                  <Pill text={`C ${f.carbs}g`} color={T.carbs} bg={T.g1} size={10} />
+                  <Pill text={`F ${f.fat}g`} color={T.fat} bg={T.g1} size={10} />
+                </div>
+              </div>
+              <button onClick={() => setFavorites(p => p.filter(x => x.name !== f.name))} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
+            </div>
+          ))
+        )
+      )}
+
+      {sub === "Want to Try" && (
+        tryList.length === 0 ? (
+          <div style={{ ...card, textAlign: "center", padding: "32px 20px" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔖</div>
+            <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.6 }}>Recipes you Save from the AI generator land here.</div>
+          </div>
+        ) : (
+          tryList.map((r, i) => {
+            const isOpen = tryOpen === r.name;
+            const diffBg = { Easy: T.success, Medium: T.warn, Hard: T.error }[r.difficulty] || T.success;
+            return (
+              <div key={r.name} style={{ ...card, padding: "14px 18px", marginBottom: 10, animation: "slideUp .35s cubic-bezier(.22,.68,0,1) both", animationDelay: `${i * 0.05}s` }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.black, lineHeight: 1.3 }}>{r.name}</div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.black }}>{r.macros ? r.macros.calories : "—"} kcal</span>
+                      <Pill text={r.difficulty} color="#1A3A2A" bg={diffBg} size={10} />
+                    </div>
+                  </div>
+                  <button onClick={() => setTryList(p => p.filter(x => x.name !== r.name))} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
+                </div>
+                <button onClick={() => setTryOpen(isOpen ? null : r.name)} style={{
+                  width: "100%", marginTop: 10, background: isOpen ? T.mintLight : T.g1, border: `1.5px solid ${isOpen ? T.mint : T.g2}`,
+                  borderRadius: 12, padding: "9px 14px", cursor: "pointer", display: "flex",
+                  justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 700, color: T.mintDark,
+                }}>
+                  <span>{isOpen ? "Hide" : "Show"} Steps ({(r.steps || []).length})</span>
+                  <span style={{ fontSize: 10, transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
+                </button>
+                {isOpen && (
+                  <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
+                    {(r.steps || []).map((s, j) => (
+                      <li key={j} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.white, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{j + 1}</span>
+                        <span style={{ fontSize: 13, color: T.g6, lineHeight: 1.6 }}>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            );
+          })
+        )
       )}
     </div>
   );
@@ -1081,7 +1224,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
           <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>My Goals</div>
           <div style={{ display: "flex", background: T.g1, borderRadius: 99, padding: 3 }}>
             {["imperial", "metric"].map(u => (
-              <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.white : T.g4, transition: "all 0.15s" }}>{u === "imperial" ? "lbs" : "kg"}</button>
+              <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.white : T.g4, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>{u === "imperial" ? "lbs" : "kg"}</button>
             ))}
           </div>
         </div>
@@ -1124,6 +1267,20 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         </div>
       </div>
 
+      {/* My Recipe Box */}
+      <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.black, padding: "12px 0 2px" }}>My Recipe Box</div>
+        {[["♥ Favorite Dishes", favorites.length, "Favorite Dishes"], ["🔖 Want to Try", tryList.length, "Want to Try"]].map(([label, count, target], i, arr) => (
+          <div key={target} onClick={() => setSub(target)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.g1}` : "none", cursor: "pointer" }}>
+            <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{label}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ background: T.mintLight, color: T.mintDark, fontSize: 12, fontWeight: 700, borderRadius: 99, padding: "2px 10px" }}>{count}</span>
+              <span style={{ color: T.g3, fontSize: 18 }}>›</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Settings */}
       <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
         {settingRows.map((s, i) => (
@@ -1144,7 +1301,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         </div>
       )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.4</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.5</div>
         <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude AI</div>
       </div>
     </div>
@@ -1212,7 +1369,8 @@ function BottomNav({ tab, setTab }) {
               background: tab === n.id ? T.mintDark : `linear-gradient(135deg, ${T.mintDark}, ${T.mintMid})`,
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
               boxShadow: `0 4px 16px rgba(30,140,95,0.4)`,
-              transition: "transform 0.15s", transform: tab === n.id ? "scale(1.08)" : "scale(1)",
+              animation: "pulseGlow 2.6s ease-in-out infinite",
+              transition: "transform .25s cubic-bezier(.34,1.56,.64,1)", transform: tab === n.id ? "scale(1.08)" : "scale(1)",
             }}>🌿</div>
           </button>
         ) : (
@@ -1220,7 +1378,7 @@ function BottomNav({ tab, setTab }) {
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
             border: "none", background: "transparent", cursor: "pointer", height: "100%", gap: 3, paddingTop: 6,
           }}>
-            <span style={{ fontSize: 20, filter: tab === n.id ? "none" : "grayscale(1) opacity(0.5)" }}>{n.icon}</span>
+            <span style={{ fontSize: 20, filter: tab === n.id ? "none" : "grayscale(1) opacity(0.5)", transition: "transform .25s cubic-bezier(.34,1.56,.64,1), filter .2s", transform: tab === n.id ? "translateY(-3px) scale(1.15)" : "translateY(0) scale(1)" }}>{n.icon}</span>
             <span style={{ fontSize: 10, fontWeight: 600, color: tab === n.id ? T.mintDark : T.g4 }}>{n.label}</span>
             {tab === n.id && <div style={{ width: 4, height: 4, borderRadius: 99, background: T.mintDark }} />}
           </button>
@@ -1241,6 +1399,8 @@ export default function NutriCookApp() {
   const [pro, setPro] = useState(false);
   const [usage, setUsage] = useState({ gen: 0, scan: 0 });
   const [paywall, setPaywall] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [tryList, setTryList] = useState([]);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -1270,6 +1430,14 @@ export default function NutriCookApp() {
       .map((n, i) => ({ id: Date.now() + i, name: n.charAt(0).toUpperCase() + n.slice(1), qty: "", cat: "From Recipes", done: false }));
     return [...p, ...add];
   });
+  const toggleFavorite = meal => setFavorites(p => p.some(f => f.name === meal.name)
+    ? p.filter(f => f.name !== meal.name)
+    : [...p, { name: meal.name, emoji: meal.emoji, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat }]);
+  // Saving an AI recipe: grocery ingredients + Want-to-Try list, deduped by name.
+  const onSaveRecipe = recipe => {
+    saveRecipeToGrocery(recipe);
+    setTryList(p => p.some(r => r.name === recipe.name) ? p : [...p, recipe]);
+  };
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
 
   return (
@@ -1277,6 +1445,10 @@ export default function NutriCookApp() {
       <style>{`
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
         @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes popIn { 0% { opacity:0; transform:scale(.92); } 70% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 4px 16px rgba(30,140,95,0.4); } 50% { box-shadow: 0 6px 26px rgba(30,140,95,0.65); } }
         * { box-sizing: border-box; }
         body { margin: 0; background: #1C1C1E; }
         button { font-family: inherit; }
@@ -1293,11 +1465,13 @@ export default function NutriCookApp() {
 
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
-          {tab === "home" && <HomeScreen setTab={setTab} />}
-          {tab === "plan" && <PlanScreen setTab={setTab} />}
-          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={saveRecipeToGrocery} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
+          <div key={tab} style={{ animation: "slideUp 0.32s cubic-bezier(.22,.68,0,1) both" }}>
+          {tab === "home" && <HomeScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} />}
+          {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} />}
+          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} />}
-          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} />}
+          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} />}
+          </div>
         </div>
 
         <BottomNav tab={tab} setTab={setTab} />

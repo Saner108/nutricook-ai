@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.5.0 — 2026-07-18
+
+### Meal History (Plan)
+- Browse up to a month back: week pager (This Week → 3 Weeks Ago) with date ranges above the day strip.
+- Past days show a Daily Summary card (total kcal vs target + P/C/F) and the four meals eaten that day, fully expandable. Today and future days behave as before.
+
+### Recipe Box (Favorites + Want to Try)
+- Tapping ♡ on any meal saves it to Favorite Dishes; hearts sync app-wide.
+- Saving an AI recipe now also files it under Want to Try (and still sends ingredients to Grocery).
+- Profile → My Recipe Box: Favorite Dishes and Want to Try pages with counts, macro pills, expandable steps, remove buttons, and helpful empty states.
+
+### Motion polish (same palette)
+- New slideUp / popIn / shimmer / pulseGlow keyframes; every tab change glides in; Home cards stagger; springy chips, pills, and day buttons; bottom-nav icons lift on select; the FAB breathes; dropdowns, accordions, and FAQ answers animate in.
+
+
 ## v2.4.0 — 2026-07-18
 
 ### NutriCook Pro — Stripe subscription (test-mode ready)
