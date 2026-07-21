@@ -210,3 +210,10 @@ begin
   return true;
 end;
 $$;
+
+-- ── Lock down SECURITY DEFINER functions ──────────────────────────────────
+-- consume_quota is called ONLY by the serverless service-role key; handle_new_user
+-- is a signup trigger. Neither should be invokable from the public REST API.
+-- The service_role bypasses these grants, so the serverless proxy is unaffected.
+revoke execute on function public.consume_quota(uuid, text) from public, anon, authenticated;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
