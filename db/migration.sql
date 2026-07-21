@@ -172,3 +172,41 @@ create policy read_own_subscription on subscriptions for select
 drop policy if exists read_own_usage on usage_counters;
 create policy read_own_usage on usage_counters for select
   using (user_id = auth.uid());
+
+-- ── Atomic free-tier enforcement (called by the serverless proxy) ─────────
+-- Checks Pro status + today's counter and increments in one transaction.
+-- Returns true if the action is allowed (and was counted), false if over the
+-- free limit. Runs as the service role, so it is safe to pass the user id in.
+create or replace function consume_quota(p_user uuid, p_kind text)
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  is_pro boolean;
+  cur usage_counters;
+begin
+  select (s.status = 'active' and (s.current_period_end is null or s.current_period_end > now()))
+    into is_pro from subscriptions s where s.user_id = p_user;
+  is_pro := coalesce(is_pro, false);
+
+  insert into usage_counters (user_id, used_on) values (p_user, current_date)
+    on conflict (user_id, used_on) do nothing;
+  select * into cur from usage_counters
+    where user_id = p_user and used_on = current_date for update;
+
+  if not is_pro then
+    if p_kind = 'scan' and cur.scans >= 1 then return false; end if;
+    if p_kind <> 'scan' and cur.generations >= 3 then return false; end if;
+  end if;
+
+  if p_kind = 'scan' then
+    update usage_counters set scans = scans + 1
+      where user_id = p_user and used_on = current_date;
+  else
+    update usage_counters set generations = generations + 1
+      where user_id = p_user and used_on = current_date;
+  end if;
+  return true;
+end;
+$$;

@@ -1,6 +1,20 @@
 // Vercel serverless proxy for the Anthropic Messages API.
 // The API key lives only in the ANTHROPIC_API_KEY env var — it is never sent
 // to (or readable from) the browser.
+//
+// When Supabase is configured, this endpoint also enforces auth + the free-tier
+// quota: a valid user token is required (401 otherwise), and once the daily free
+// allowance is spent it returns 402 { error: { code: "quota_exceeded" } } so the
+// frontend can open the paywall. Pro subscribers are never gated. With Supabase
+// absent it behaves exactly as before (open proxy) so demo mode still works.
+import { supabaseConfigured, getUser, bearer, rpc } from "./_lib/supabaseAdmin.js";
+
+function isScanRequest(messages) {
+  return (Array.isArray(messages) ? messages : []).some(
+    m => Array.isArray(m?.content) && m.content.some(c => c && c.type === "image")
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: { message: "Method not allowed" } });
@@ -21,6 +35,23 @@ export default async function handler(req, res) {
     return;
   }
   const { model, max_tokens, messages, stream } = body;
+
+  // Auth + quota gate (only when Supabase is configured).
+  if (supabaseConfigured) {
+    const user = await getUser(bearer(req));
+    if (!user) {
+      res.status(401).json({ error: { message: "Sign in required" } });
+      return;
+    }
+    const kind = isScanRequest(messages) ? "scan" : "gen";
+    const allowed = await rpc("consume_quota", { p_user: user.id, p_kind: kind });
+    if (allowed === false) {
+      res.status(402).json({ error: { code: "quota_exceeded", message: "Daily free limit reached" } });
+      return;
+    }
+    // allowed === null means the quota check itself failed (e.g. transient DB
+    // error); fail open on metering rather than blocking a valid/paying user.
+  }
 
   let upstream;
   try {
