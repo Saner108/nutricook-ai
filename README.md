@@ -81,16 +81,48 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-### Adding Your API Key
+### API key & demo mode
 
-When the app loads, you'll see a yellow banner at the top:
+The Anthropic API key is **never entered in the browser**. It lives server-side in the
+`/api/generate` Vercel function (env var `ANTHROPIC_API_KEY`). During local `npm run dev`,
+a Vite middleware serves `/api/generate`: it proxies to Anthropic when `ANTHROPIC_API_KEY`
+is set, and otherwise returns realistic streamed mocks so the whole UX works offline.
 
-1. Click **"Add Key →"**
-2. Paste your Anthropic API key (starts with `sk-ant-`)
-3. Click **Save**
-4. Navigate to the **AI tab** (🌿 center button) to generate recipes
+With no Supabase env vars configured the app runs in **demo mode** — session-only mock
+data, no login required — exactly as it did before Phase 4.
 
-> **Note:** The API key is stored in React state only — it is never saved to disk, localStorage, or any server. Each session requires re-entering the key. For a production deployment, move the API call to a backend server to keep your key secure.
+---
+
+## Backend setup (Phase 4)
+
+NutriCook uses **Supabase** for auth + persistence and **Stripe** for the Pro
+subscription. Both are optional: leave them unconfigured and the app runs in demo mode.
+
+1. **Create a free Supabase project.** Copy the Project URL, the `anon` public key,
+   and the `service_role` key (Settings → API).
+2. **Run the migration.** Paste `db/migration.sql` into the Supabase SQL editor and run
+   it. This creates every table, the `handle_new_user` trigger, Row-Level Security
+   policies, and the `consume_quota` enforcement function.
+3. **(Optional) Enable Google sign-in** under Authentication → Providers.
+4. **Set env vars** (in Vercel → Project Settings, and locally in `.env.local` — see
+   `.env.example`):
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | frontend | Browser client (RLS-scoped). Public. |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | serverless | Token verification. |
+| `SUPABASE_SERVICE_ROLE_KEY` | serverless | Quota writes + webhook. **Never expose.** |
+| `ANTHROPIC_API_KEY` | serverless | Recipe/scan/remix proxy. |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | serverless | Pro checkout + webhook (optional). |
+
+5. **(Optional) Stripe:** create a $4.99/mo recurring Price, and a webhook endpoint
+   pointing at `/api/stripe-webhook` for `checkout.session.completed`,
+   `customer.subscription.updated`, and `customer.subscription.deleted`. Test with card
+   `4242 4242 4242 4242`.
+
+**Security notes:** the `service_role` key stays server-side only; RLS confines every
+user to their own rows (verify by attempting a cross-user read from a second account);
+the Stripe webhook signature is verified; the Anthropic key never reaches the browser.
 
 ---
 
@@ -114,10 +146,20 @@ npm run build
 
 ```
 nutricook-ai/
+├── api/
+│   ├── generate.js         # Anthropic proxy (auth + quota gate; streaming)
+│   ├── checkout.js         # Stripe Checkout session
+│   ├── stripe-webhook.js   # Subscription lifecycle → Supabase
+│   └── _lib/supabaseAdmin.js  # service-role helpers (not routed)
+├── db/
+│   └── migration.sql       # schema + RLS + consume_quota RPC
 ├── src/
-│   ├── App.jsx          # Full application (all screens + components)
-│   └── main.jsx         # React entry point
-├── index.html
+│   ├── lib/                # supabase client, db access layer, quota/streak helpers
+│   ├── App.jsx             # legacy standalone version (unused)
+│   └── main.jsx            # React entry → artifacts/NutriCookAI_v2.tsx
+├── artifacts/
+│   └── NutriCookAI_v2.tsx  # the shipped app (all screens + components)
+├── test/                   # node --test unit tests
 ├── vite.config.js
 ├── package.json
 └── README.md
@@ -127,23 +169,21 @@ nutricook-ai/
 
 ## AI Integration
 
-The AI Generator uses a structured JSON prompt to ensure consistent, parseable output from Claude:
+The AI Generator streams recipes from Claude through the server-side `/api/generate`
+proxy — the browser never sees the API key. A structured JSON prompt keeps output
+parseable, and recipes render progressively as they stream in:
 
 ```javascript
-// Prompt requests 3 recipes as strict JSON
-const prompt = `Generate exactly 3 different recipes using: ${ingredients}.
-Goal: ${goal}. ${dietaryRequirements}
-Return ONLY valid JSON: {"recipes": [{ "name", "difficulty", "prepTime", "servings", "macros": {...}, "steps": [...] }]}`;
-
-// API call with direct browser access header
-const response = await fetch("https://api.anthropic.com/v1/messages", {
-  headers: {
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-    "anthropic-dangerous-direct-browser-access": "true",
-  },
-  body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages })
+// Streamed request through the proxy (key stays server-side)
+const res = await fetch("/api/generate", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "claude-sonnet-4-6", max_tokens: 1500, stream: true,
+    messages: [{ role: "user", content: prompt }],
+  }),
 });
+// SSE deltas are parsed incrementally so finished recipes appear one by one.
 ```
 
 ---

@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.6.0 — 2026-07-21
+
+### Phase 4 — Backend, Auth & Persistence (Supabase)
+NutriCook now has real accounts and real data. Everything degrades to the v2.5
+demo (session-only mock state) when Supabase env vars are absent, so the app still
+runs with zero setup.
+
+- **Auth gate.** Email/password + Continue with Google (Supabase Auth). Signed-out
+  users see a styled AuthScreen inside the 430px frame; sign-out lives in Profile.
+- **Onboarding.** First-login 3-step flow (name → goal → current/target weight) that
+  writes the profile, derives calorie/macro targets from the goal, and seeds a
+  starter grocery list.
+- **Live data.** Profile (name, goal, targets, units, dietary prefs), weight logs +
+  chart, favorites, Want-to-Try, grocery items, water, and meal logs all load from
+  Supabase and write through on every change (RLS keeps each user to their own rows).
+- **Real history + streak.** Marking a meal eaten on Home logs it; the Plan tab's
+  past days read real `meal_logs`, and the streak is computed from consecutive logged
+  days (no more hardcoded 12).
+- **Server-side quota.** `api/generate.js` now requires a valid user token and enforces
+  the free tier atomically in Postgres (3 generations + 1 scan/day), returning 402 to
+  open the paywall. Pro subscribers are never gated.
+- **Stripe ↔ user.** Checkout sessions are attributed to the user; the webhook is the
+  single source of truth, upserting a `subscriptions` row that drives Pro status.
+- **`db/migration.sql`** — full schema, `handle_new_user` trigger, RLS policies, and the
+  `consume_quota` enforcement function. **`src/lib/quota.js`** — pure, unit-tested
+  quota/streak helpers (15/15 tests pass). README setup guide + `.env.example` added.
+
+### Setup (Cesar)
+Create a free Supabase project, run `db/migration.sql` in the SQL editor, and add
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (frontend) plus `SUPABASE_URL` /
+`SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (serverless) in Vercel. Stripe keys
+optional. See README → "Backend setup (Phase 4)".
+
+
 ## v2.5.0 — 2026-07-18
 
 ### Meal History (Plan)

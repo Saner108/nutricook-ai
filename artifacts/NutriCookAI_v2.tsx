@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { hasSupabase, supabase } from "../src/lib/supabase.js";
+import { isProActive, computeStreak } from "../src/lib/quota.js";
+import * as db from "../src/lib/db.js";
 
 // ── Tokens ──────────────────────────────────────────────
 const T = {
@@ -439,12 +442,25 @@ async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
 
 // ── Screens ──────────────────────────────────────────────
 
-function HomeScreen({ setTab, favorites, toggleFavorite }) {
-  const [water, setWater] = useState(CONSUMED.water);
-  const rem = TARGETS.kcal - CONSUMED.kcal;
-  const prot = CONSUMED.protein / TARGETS.protein;
-  const carbs = CONSUMED.carbs / TARGETS.carbs;
-  const fat = CONSUMED.fat / TARGETS.fat;
+function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, targets = TARGETS, live = false, mealLogs = [], initialWater, onWater, onMarkMeal }) {
+  // In live mode, "today's progress" sums the meals the user has marked eaten
+  // today (seeded from meal_logs, updated live as they tap). Demo mode keeps the
+  // static v2.5 figures.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [eaten, setEaten] = useState(() => new Set(
+    (mealLogs || []).filter(m => String(m.eaten_on).slice(0, 10) === todayISO && m.done !== false).map(m => m.slot)
+  ));
+  const markEaten = meal => {
+    const on = !eaten.has(meal.type);
+    setEaten(prev => { const n = new Set(prev); on ? n.add(meal.type) : n.delete(meal.type); return n; });
+    onMarkMeal?.(meal, on);
+  };
+  const consumed = live
+    ? MEALS.filter(m => eaten.has(m.type)).reduce((a, m) => ({ kcal: a.kcal + m.kcal, protein: a.protein + m.protein, carbs: a.carbs + m.carbs, fat: a.fat + m.fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 })
+    : CONSUMED;
+  const [water, setWater] = useState(initialWater ?? CONSUMED.water);
+  const changeWater = n => { setWater(n); onWater?.(n); };
+  const rem = targets.kcal - consumed.kcal;
 
   return (
     <div style={{ padding: "16px 16px 8px" }}>
@@ -452,7 +468,7 @@ function HomeScreen({ setTab, favorites, toggleFavorite }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 14, color: T.g4, fontWeight: 500 }}>{NOW.getHours() < 12 ? "Good morning," : NOW.getHours() < 18 ? "Good afternoon," : "Good evening,"}</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>{USER.name} 👋</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>{userName} 👋</div>
         </div>
         <div style={{ width: 44, height: 44, borderRadius: 99, background: `linear-gradient(135deg, ${T.mintDark}, ${T.mint})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>💪</div>
       </div>
@@ -461,25 +477,25 @@ function HomeScreen({ setTab, favorites, toggleFavorite }) {
       <div style={{ ...card, background: `linear-gradient(140deg, #0E2A1C 0%, #1A5C3A 60%, #1E8C5F 100%)`, marginBottom: 14, padding: "22px 20px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's Progress</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Ring pct={CONSUMED.kcal / TARGETS.kcal} color={T.mint} size={120} stroke={10}>
+          <Ring pct={consumed.kcal / targets.kcal} color={T.mint} size={120} stroke={10}>
             <div style={{ fontSize: 24, fontWeight: 800, color: T.white, lineHeight: 1 }}>{rem}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>kcal left</div>
           </Ring>
           <div style={{ flex: 1, paddingLeft: 24 }}>
-            <MacroRow label="Protein" value={CONSUMED.protein} target={TARGETS.protein} color={T.protein} />
-            <MacroRow label="Carbs" value={CONSUMED.carbs} target={TARGETS.carbs} color={T.carbs} />
-            <MacroRow label="Fat" value={CONSUMED.fat} target={TARGETS.fat} color={T.fat} />
+            <MacroRow label="Protein" value={consumed.protein} target={targets.protein} color={T.protein} />
+            <MacroRow label="Carbs" value={consumed.carbs} target={targets.carbs} color={T.carbs} />
+            <MacroRow label="Fat" value={consumed.fat} target={targets.fat} color={T.fat} />
           </div>
         </div>
         {/* Water */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>💧 Water</span>
-            <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{water}/{TARGETS.water} glasses</span>
+            <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{water}/{targets.water} glasses</span>
           </div>
           <div style={{ display: "flex", gap: 5 }}>
-            {Array(TARGETS.water).fill(0).map((_, i) => (
-              <div key={i} onClick={() => setWater(i + 1 === water ? i : i + 1)} title="Tap to log water"
+            {Array(targets.water).fill(0).map((_, i) => (
+              <div key={i} onClick={() => changeWater(i + 1 === water ? i : i + 1)} title="Tap to log water"
                 style={{ flex: 1, height: 8, borderRadius: 99, cursor: "pointer", background: i < water ? T.water : "rgba(255,255,255,0.15)", transition: "background 0.2s" }} />
             ))}
           </div>
@@ -503,7 +519,14 @@ function HomeScreen({ setTab, favorites, toggleFavorite }) {
       <div style={{ fontSize: 18, fontWeight: 700, color: T.black, marginBottom: 12 }}>Today's Meals</div>
       {MEALS.map((m, i) => (
         <div key={m.id} style={{ animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: `${(i + 2) * 0.06}s` }}>
-          <MealCard meal={m} isFav={favorites.some(f => f.name === m.name)} onFav={toggleFavorite} />
+          <MealCard meal={live ? { ...m, done: eaten.has(m.type) } : m} isFav={favorites.some(f => f.name === m.name)} onFav={toggleFavorite} />
+          {live && (
+            <button onClick={() => markEaten(m)} style={{
+              width: "100%", marginTop: -6, marginBottom: 12, padding: "9px", borderRadius: 12, cursor: "pointer",
+              border: `1.5px solid ${eaten.has(m.type) ? T.mintDark : T.g2}`, background: eaten.has(m.type) ? T.mintLight : T.white,
+              color: eaten.has(m.type) ? T.mintDark : T.g5, fontSize: 13, fontWeight: 700,
+            }}>{eaten.has(m.type) ? "✓ Eaten today" : "Mark as eaten"}</button>
+          )}
         </div>
       ))}
     </div>
@@ -529,7 +552,7 @@ function MacroRow({ label, value, target, color }) {
   );
 }
 
-function PlanScreen({ setTab, favorites, toggleFavorite }) {
+function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live = false, mealLogs = [] }) {
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week … -3 = 3 weeks ago
   const [day, setDay] = useState(TODAY);
   const [expanded, setExpanded] = useState("Dinner");
@@ -540,8 +563,18 @@ function PlanScreen({ setTab, favorites, toggleFavorite }) {
   const offsetDays = weekOffset * 7 + (day - TODAY);
   const isToday = weekOffset === 0 && day === TODAY;
   const isPast = offsetDays < 0;
-  const history = isPast ? historyFor(offsetDays) : null;
-  const histTotals = history ? types.reduce((a, t) => ({ kcal: a.kcal + history[t].kcal, protein: a.protein + history[t].protein, carbs: a.carbs + history[t].carbs, fat: a.fat + history[t].fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : null;
+  // Live mode reads real meal_logs for the selected day; demo mode uses the
+  // deterministic generator so the app still tells a story with zero setup.
+  const selISO = weekDates[day].toISOString().slice(0, 10);
+  const liveHistory = () => {
+    const rows = (mealLogs || []).filter(m => String(m.eaten_on).slice(0, 10) === selISO && m.done !== false);
+    if (!rows.length) return {};
+    const out = {};
+    rows.forEach(r => { out[r.slot] = { name: r.name, emoji: r.emoji || "🍽", kcal: r.kcal, protein: r.protein, carbs: r.carbs, fat: r.fat, type: r.slot, done: true, prep: "", difficulty: "Easy", confidence: 92 }; });
+    return out;
+  };
+  const history = isPast ? (live ? liveHistory() : historyFor(offsetDays)) : null;
+  const histTotals = history ? types.reduce((a, t) => history[t] ? { kcal: a.kcal + history[t].kcal, protein: a.protein + history[t].protein, carbs: a.carbs + history[t].carbs, fat: a.fat + history[t].fat } : a, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : null;
   const pagerBtn = enabled => ({
     width: 32, height: 32, borderRadius: 99, border: "none", background: T.white, boxShadow: shadow.sm,
     cursor: enabled ? "pointer" : "default", fontSize: 16, fontWeight: 700, color: T.g6,
@@ -579,7 +612,7 @@ function PlanScreen({ setTab, favorites, toggleFavorite }) {
         <div style={{ ...card, marginBottom: 12, padding: "16px 18px", animation: "popIn .25s ease both" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>📒 Daily Summary</span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: histTotals.kcal <= TARGETS.kcal ? T.mintDark : T.warn }}>{histTotals.kcal} / {TARGETS.kcal} kcal</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: histTotals.kcal <= targets.kcal ? T.mintDark : T.warn }}>{histTotals.kcal} / {targets.kcal} kcal</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {[["Protein", histTotals.protein, T.protein], ["Carbs", histTotals.carbs, T.carbs], ["Fat", histTotals.fat, T.fat]].map(([l, v, c]) => (
@@ -595,7 +628,7 @@ function PlanScreen({ setTab, favorites, toggleFavorite }) {
       {types.map(type => {
         const meal = isPast ? history[type] : (MEALS.find(m => m.type === type) || MEALS[0]);
         const isOpen = expanded === type;
-        const planned = isToday || isPast;
+        const planned = isPast ? !!meal : isToday;
         return (
           <div key={type} style={{ marginBottom: 10 }}>
             <button onClick={() => setExpanded(isOpen ? null : type)} style={{
@@ -908,16 +941,22 @@ function GroceryRow({ item, onToggle }) {
   );
 }
 
-function GroceryScreen({ items, setItems }) {
+function GroceryScreen({ items, setItems, onAdd, onToggle }) {
   const [newItem, setNewItem] = useState("");
   const total = items.length;
   const done = items.filter(i => i.done).length;
-  const toggle = id => setItems(p => p.map(i => i.id === id ? { ...i, done: !i.done } : i));
+  const toggle = id => setItems(p => p.map(i => {
+    if (i.id !== id) return i;
+    onToggle?.(id, !i.done);
+    return { ...i, done: !i.done };
+  }));
   const addItem = () => {
     const t = newItem.trim();
     if (!t) return;
     if (items.some(i => i.name.toLowerCase() === t.toLowerCase())) { setNewItem(""); return; }
-    setItems(p => [...p, { id: Date.now(), name: t.charAt(0).toUpperCase() + t.slice(1), qty: "", cat: guessCategory(t), done: false }]);
+    const item = { id: Date.now(), name: t.charAt(0).toUpperCase() + t.slice(1), qty: "", cat: guessCategory(t), done: false };
+    setItems(p => [...p, item]);
+    onAdd?.(item);
     setNewItem("");
   };
   const active = items.filter(i => !i.done);
@@ -1000,7 +1039,8 @@ function WeightChart({ data }) {
   );
 }
 
-function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall, favorites, setFavorites, tryList, setTryList }) {
+function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall, favorites, setFavorites, tryList, setTryList,
+  userName = USER.name, userGoal = USER.goal, targetLbs = USER.targetLbs, targets = TARGETS, streak = USER.streak, email, onSignOut, onLogWeight, onRemoveFavorite, onRemoveTry }) {
   const [sub, setSub] = useState(null);
   const [logVal, setLogVal] = useState("");
   const [notif, setNotif] = useState({ "Meal Reminders": true, "Water Reminders": true, "Weekly Progress Report": false, "Streak Alerts": true, "AI Recipe Suggestions": true });
@@ -1018,6 +1058,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
     const asLbs = units === "metric" ? Math.round((n / 0.45359) * 10) / 10 : n;
     const label = NOW.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     setWeights(prev => [...prev.slice(-11), { d: label, w: asLbs }]);
+    onLogWeight?.(asLbs);
     setLogVal("");
   };
 
@@ -1131,7 +1172,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                   <Pill text={`F ${f.fat}g`} color={T.fat} bg={T.g1} size={10} />
                 </div>
               </div>
-              <button onClick={() => setFavorites(p => p.filter(x => x.name !== f.name))} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
+              <button onClick={() => { setFavorites(p => p.filter(x => x.name !== f.name)); onRemoveFavorite?.(f.name); }} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
             </div>
           ))
         )
@@ -1157,7 +1198,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                       <Pill text={r.difficulty} color="#1A3A2A" bg={diffBg} size={10} />
                     </div>
                   </div>
-                  <button onClick={() => setTryList(p => p.filter(x => x.name !== r.name))} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
+                  <button onClick={() => { setTryList(p => p.filter(x => x.name !== r.name)); onRemoveTry?.(r.name); }} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
                 </div>
                 <button onClick={() => setTryOpen(isOpen ? null : r.name)} style={{
                   width: "100%", marginTop: 10, background: isOpen ? T.mintLight : T.g1, border: `1.5px solid ${isOpen ? T.mint : T.g2}`,
@@ -1187,10 +1228,10 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
 
   const statRows = [
     { icon: "⚖️", label: "Current Weight", value: disp(lbs) },
-    { icon: "🎯", label: "Target Weight", value: disp(USER.targetLbs) },
-    { icon: "🔥", label: "Daily Calories", value: `${TARGETS.kcal} kcal` },
-    { icon: "💪", label: "Daily Protein", value: `${TARGETS.protein}g` },
-    { icon: "📅", label: "Current Streak", value: `${USER.streak} days` },
+    { icon: "🎯", label: "Target Weight", value: disp(targetLbs) },
+    { icon: "🔥", label: "Daily Calories", value: `${targets.kcal} kcal` },
+    { icon: "💪", label: "Daily Protein", value: `${targets.protein}g` },
+    { icon: "📅", label: "Current Streak", value: `${streak} day${streak === 1 ? "" : "s"}` },
   ];
   const settingRows = ["Notification Preferences","Dietary Restrictions","Connected Apps","Privacy Settings","Help & Support"];
   return (
@@ -1200,9 +1241,9 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ flexShrink: 0, textAlign: "center" }}>
             <div style={{ width: 64, height: 64, borderRadius: 99, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 8px" }}>💪</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: T.white }}>{USER.name}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#0E2A1C", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.white }}>{userName}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#0E2A1C", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
             <div style={{ display: "inline-block", background: "rgba(168,245,211,0.2)", borderRadius: 99, padding: "3px 10px", marginTop: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>🎯 {USER.goal}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>🎯 {userGoal}</span>
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1249,9 +1290,9 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
       {/* Macro split */}
       <div style={{ ...card, marginBottom: 14, padding: "16px 18px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.black, marginBottom: 14 }}>Macro Split</div>
-        <MacroBar label="Protein" value={TARGETS.protein} max={TARGETS.protein + TARGETS.carbs + TARGETS.fat} color={T.protein} />
-        <MacroBar label="Carbohydrates" value={TARGETS.carbs} max={TARGETS.protein + TARGETS.carbs + TARGETS.fat} color={T.carbs} />
-        <MacroBar label="Fat" value={TARGETS.fat} max={TARGETS.protein + TARGETS.carbs + TARGETS.fat} color={T.fat} />
+        <MacroBar label="Protein" value={targets.protein} max={targets.protein + targets.carbs + targets.fat} color={T.protein} />
+        <MacroBar label="Carbohydrates" value={targets.carbs} max={targets.protein + targets.carbs + targets.fat} color={T.carbs} />
+        <MacroBar label="Fat" value={targets.fat} max={targets.protein + targets.carbs + targets.fat} color={T.fat} />
       </div>
 
       {/* Achievement badges */}
@@ -1300,8 +1341,22 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
           <span style={{ color: T.mint, fontSize: 18 }}>›</span>
         </div>
       )}
+      {onSignOut && (
+        <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
+          {email && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", borderBottom: `1px solid ${T.g1}` }}>
+              <span style={{ fontSize: 15, color: T.g5, fontWeight: 500 }}>Account</span>
+              <span style={{ fontSize: 13, color: T.g4, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</span>
+            </div>
+          )}
+          <div onClick={onSignOut} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", cursor: "pointer" }}>
+            <span style={{ fontSize: 15, color: T.error, fontWeight: 600 }}>Sign Out</span>
+            <span style={{ color: T.g3, fontSize: 18 }}>›</span>
+          </div>
+        </div>
+      )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.5</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.6</div>
         <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude AI</div>
       </div>
     </div>
@@ -1388,32 +1443,66 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-// ── App ──────────────────────────────────────────────────
-export default function NutriCookApp() {
+// ── Main App (post-auth) ─────────────────────────────────
+// `boot` is the loaded Supabase data in live mode, or null in demo mode. Every
+// state initializer falls back to the v2.5 seed data when boot is absent, so the
+// demo experience is byte-for-byte unchanged.
+function MainApp({ boot, mode, email, onSignOut }) {
+  const live = mode === "live";
+  const profile = boot?.profile || null;
+  const userName = profile?.name || USER.name;
+  const userGoal = profile?.goal || USER.goal;
+  const targetLbs = profile?.target_lbs ?? USER.targetLbs;
+  const targets = profile
+    ? { kcal: profile.kcal_target, protein: profile.protein_target, carbs: profile.carbs_target, fat: profile.fat_target, water: profile.water_target }
+    : TARGETS;
+  const streak = live ? computeStreak(boot?.mealLogs || []) : USER.streak;
+
   const [tab, setTab] = useState("home");
   const scrollRef = useRef(null);
-  const [prefs, setPrefs] = useState([]);
-  const [units, setUnits] = useState("imperial");
-  const [weights, setWeights] = useState(WEIGHT_SEED);
-  const [groceryItems, setGroceryItems] = useState(() => Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ ...i, cat }))));
-  const [pro, setPro] = useState(false);
+  const [prefs, setPrefsRaw] = useState(profile?.dietary_prefs || []);
+  const [units, setUnitsRaw] = useState(profile?.units || "imperial");
+  const [weights, setWeights] = useState(boot?.weights?.length ? boot.weights : WEIGHT_SEED);
+  const [groceryItems, setGroceryItems] = useState(
+    boot?.grocery ? boot.grocery : Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ ...i, cat })))
+  );
+  const [pro, setPro] = useState(live ? isProActive(boot?.sub) : false);
   const [usage, setUsage] = useState({ gen: 0, scan: 0 });
   const [paywall, setPaywall] = useState(false);
-  const [favorites, setFavorites] = useState([]);
-  const [tryList, setTryList] = useState([]);
+  const [favorites, setFavorites] = useState(boot?.favorites || []);
+  const [tryList, setTryList] = useState(boot?.tryList || []);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const mealLogs = boot?.mealLogs || [];
+
+  // Write-through helpers: persist to Supabase in live mode, no-op in demo.
+  const persist = (fn, ...args) => { if (live) Promise.resolve(fn(...args)).catch(() => {}); };
+  const setPrefs = updater => setPrefsRaw(prev => {
+    const next = typeof updater === "function" ? updater(prev) : updater;
+    persist(db.updateProfile, { dietary_prefs: next });
+    return next;
+  });
+  const setUnits = u => { setUnitsRaw(u); persist(db.updateProfile, { units: u }); };
+
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("upgraded") === "1") {
       setPro(true);
       window.history.replaceState({}, "", window.location.pathname);
+      // Confirm against the webhook-written subscription (it may lag a moment).
+      if (live) setTimeout(() => supabase.from("subscriptions").select("*").maybeSingle()
+        .then(({ data }) => { if (data) setPro(isProActive(data)); }), 4000);
     }
   }, []);
   const useQuota = kind => setUsage(u => ({ ...u, [kind]: u[kind] + 1 }));
   const startCheckout = async () => {
     setCheckoutBusy(true);
     try {
-      const res = await fetch("/api/checkout", { method: "POST" });
+      const headers = {};
+      if (live) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) headers.Authorization = `Bearer ${data.session.access_token}`;
+      }
+      const res = await fetch("/api/checkout", { method: "POST", headers });
       const d = await res.json();
       if (d.url) { window.location.href = d.url; return; }
     } catch {}
@@ -1422,22 +1511,36 @@ export default function NutriCookApp() {
     setPaywall(false);
     setCheckoutBusy(false);
   };
-  const saveRecipeToGrocery = recipe => setGroceryItems(p => {
-    const have = p.map(x => x.name.toLowerCase());
-    const add = (recipe.ingredients || [])
-      .map(n => String(n).trim())
-      .filter(n => n && !have.includes(n.toLowerCase()))
-      .map((n, i) => ({ id: Date.now() + i, name: n.charAt(0).toUpperCase() + n.slice(1), qty: "", cat: "From Recipes", done: false }));
-    return [...p, ...add];
+  const saveRecipeToGrocery = recipe => {
+    let added = [];
+    setGroceryItems(p => {
+      const have = p.map(x => x.name.toLowerCase());
+      added = (recipe.ingredients || [])
+        .map(n => String(n).trim())
+        .filter(n => n && !have.includes(n.toLowerCase()))
+        .map((n, i) => ({ id: Date.now() + i, name: n.charAt(0).toUpperCase() + n.slice(1), qty: "", cat: "From Recipes", done: false }));
+      return [...p, ...added];
+    });
+    return added;
+  };
+  const toggleFavorite = meal => setFavorites(p => {
+    if (p.some(f => f.name === meal.name)) { persist(db.removeFavorite, meal.name); return p.filter(f => f.name !== meal.name); }
+    persist(db.addFavorite, meal);
+    return [...p, { name: meal.name, emoji: meal.emoji, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat }];
   });
-  const toggleFavorite = meal => setFavorites(p => p.some(f => f.name === meal.name)
-    ? p.filter(f => f.name !== meal.name)
-    : [...p, { name: meal.name, emoji: meal.emoji, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat }]);
   // Saving an AI recipe: grocery ingredients + Want-to-Try list, deduped by name.
   const onSaveRecipe = recipe => {
-    saveRecipeToGrocery(recipe);
+    const addedGrocery = saveRecipeToGrocery(recipe);
     setTryList(p => p.some(r => r.name === recipe.name) ? p : [...p, recipe]);
+    persist(db.saveRecipe, recipe, addedGrocery);
   };
+  const removeFavorite = name => { setFavorites(p => p.filter(x => x.name !== name)); persist(db.removeFavorite, name); };
+  const removeTry = name => { setTryList(p => p.filter(x => x.name !== name)); persist(db.removeTryList, name); };
+  const logWeightLbs = asLbs => persist(db.logWeight, asLbs);
+  const onGroceryAdd = item => persist(db.addGrocery, item);
+  const onGroceryToggle = (id, done) => persist(db.toggleGrocery, id, done);
+  const onWater = glasses => persist(db.setWaterGlasses, glasses);
+  const onMarkMeal = (meal, done) => persist(db.markMeal, meal, done);
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
 
   return (
@@ -1466,11 +1569,11 @@ export default function NutriCookApp() {
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
           <div key={tab} style={{ animation: "slideUp 0.32s cubic-bezier(.22,.68,0,1) both" }}>
-          {tab === "home" && <HomeScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} />}
-          {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} />}
+          {tab === "home" && <HomeScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} />}
+          {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
           {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
-          {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} />}
-          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} />}
+          {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}
+          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} userName={userName} userGoal={userGoal} targetLbs={targetLbs} targets={targets} streak={streak} email={email} onSignOut={onSignOut} onLogWeight={logWeightLbs} onRemoveFavorite={removeFavorite} onRemoveTry={removeTry} />}
           </div>
         </div>
 
@@ -1479,4 +1582,249 @@ export default function NutriCookApp() {
       </div>
     </>
   );
+}
+
+// ── Auth shell (phone frame used by the loading / auth / onboarding screens) ─
+function GlobalStyle() {
+  return (
+    <style>{`
+      @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+      @keyframes popIn { 0% { opacity:0; transform:scale(.92); } 70% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #1C1C1E; }
+      button, input { font-family: inherit; }
+    `}</style>
+  );
+}
+function Frame({ children }) {
+  return (
+    <>
+      <GlobalStyle />
+      <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", background: T.bg, position: "relative", overflow: "hidden", fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
+        {children}
+      </div>
+    </>
+  );
+}
+
+function AuthField({ label, ...props }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, marginBottom: 6 }}>{label}</div>
+      <input {...props} style={{ width: "100%", border: `1.5px solid ${T.g2}`, borderRadius: 12, padding: "13px 14px", fontSize: 15, outline: "none", background: T.white, color: T.black }} />
+    </div>
+  );
+}
+
+// ── Auth screen (email/password + Google) ────────────────
+function AuthScreen() {
+  const [mode, setMode] = useState("signin"); // signin | signup
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const submit = async () => {
+    if (busy) return;
+    setErr(null); setMsg(null);
+    if (!email.trim() || !pw) { setErr("Enter your email and password."); return; }
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({ email: email.trim(), password: pw, options: { data: { name: name.trim() } } });
+        if (error) throw error;
+        setMsg("Account created — you can start cooking. (If email confirmation is on, check your inbox first.)");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
+        if (error) throw error;
+      }
+    } catch (e) {
+      setErr(e?.message || "Something went wrong — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const google = async () => {
+    setErr(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+      if (error) throw error;
+    } catch (e) {
+      setErr(e?.message || "Google sign-in isn't available — use email instead.");
+    }
+  };
+
+  return (
+    <Frame>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 22px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", marginBottom: 24, animation: "fadeUp .4s ease both" }}>
+          <div style={{ width: 64, height: 64, borderRadius: 20, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 12px" }}>🌿</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>NutriCook AI</div>
+          <div style={{ fontSize: 14, color: T.g4, marginTop: 4 }}>{mode === "signup" ? "Create your account" : "Welcome back"}</div>
+        </div>
+        <div style={{ ...card, padding: "18px", animation: "fadeUp .4s ease .05s both" }}>
+          {mode === "signup" && <AuthField label="Name" value={name} onChange={e => setName(e.target.value)} placeholder="Cesar" />}
+          <AuthField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" onKeyDown={e => e.key === "Enter" && submit()} />
+          <AuthField label="Password" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === "Enter" && submit()} />
+          {err && <div style={{ fontSize: 13, color: T.error, marginBottom: 10 }}>⚠️ {err}</div>}
+          {msg && <div style={{ fontSize: 13, color: T.mintDark, marginBottom: 10 }}>✓ {msg}</div>}
+          <Btn label={busy ? "…" : mode === "signup" ? "Create account" : "Sign in"} primary onPress={submit} style={{ width: "100%", marginBottom: 10 }} />
+          <button onClick={google} style={{ width: "100%", padding: "13px", borderRadius: 12, border: `1.5px solid ${T.g2}`, background: T.white, color: T.g6, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Continue with Google</button>
+        </div>
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <span style={{ fontSize: 13, color: T.g4 }}>{mode === "signup" ? "Already have an account?" : "New here?"} </span>
+          <span onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setErr(null); setMsg(null); }} style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, cursor: "pointer" }}>{mode === "signup" ? "Sign in" : "Create an account"}</span>
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
+// ── Onboarding (name → goal → weight) ────────────────────
+const GOAL_TARGETS = {
+  "Fat Loss": { kcal: 1800, protein: 150, carbs: 150, fat: 60 },
+  "Muscle Gain": { kcal: 2200, protein: 165, carbs: 220, fat: 73 },
+  "Maintenance": { kcal: 2000, protein: 140, carbs: 200, fat: 66 },
+  "High Protein": { kcal: 2100, protein: 180, carbs: 170, fat: 60 },
+  "Low Carb": { kcal: 1900, protein: 160, carbs: 110, fat: 90 },
+  "Balanced": { kcal: 2000, protein: 130, carbs: 210, fat: 67 },
+};
+function OnboardingScreen({ email, defaultName, onDone }) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState(defaultName || "");
+  const [goal, setGoal] = useState("Muscle Gain");
+  const [units, setUnits] = useState("imperial");
+  const [weight, setWeight] = useState("");
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const toLbs = v => { const n = parseFloat(v); if (!n) return null; return units === "metric" ? Math.round((n / 0.45359) * 10) / 10 : n; };
+
+  const finish = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    const t = GOAL_TARGETS[goal];
+    const wLbs = toLbs(weight);
+    const tLbs = toLbs(target);
+    try {
+      await db.updateProfile({
+        name: name.trim() || "there", goal, units,
+        weight_lbs: wLbs, target_lbs: tLbs,
+        kcal_target: t.kcal, protein_target: t.protein, carbs_target: t.carbs, fat_target: t.fat,
+        dietary_prefs: [], onboarded: true,
+      });
+      await db.seedStarter(Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ name: i.name, qty: i.qty, cat, done: i.done }))), wLbs);
+      onDone();
+    } catch (e) {
+      setErr(e?.message || "Couldn't save — try again.");
+      setBusy(false);
+    }
+  };
+
+  const steps = ["Your name", "Your goal", "Your weight"];
+  return (
+    <Frame>
+      <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+          {steps.map((_, i) => (
+            <div key={i} style={{ flex: 1, height: 5, borderRadius: 99, background: i <= step ? T.mintDark : T.g2, transition: "background .3s" }} />
+          ))}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Step {step + 1} of 3</div>
+        <div style={{ fontSize: 24, fontWeight: 800, color: T.black, letterSpacing: -0.4, marginBottom: 20 }}>{steps[step]}</div>
+
+        {step === 0 && (
+          <div style={{ animation: "fadeUp .35s ease both" }}>
+            <AuthField label="What should we call you?" value={name} onChange={e => setName(e.target.value)} placeholder="Cesar" onKeyDown={e => e.key === "Enter" && setStep(1)} />
+          </div>
+        )}
+        {step === 1 && (
+          <div style={{ animation: "fadeUp .35s ease both", display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {GOAL_OPTS.map(g => (
+              <button key={g} onClick={() => setGoal(g)} style={{
+                padding: "10px 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
+                background: goal === g ? T.mintDark : T.white, color: goal === g ? T.white : T.g5, boxShadow: shadow.sm,
+              }}>{g}</button>
+            ))}
+            <div style={{ width: "100%", fontSize: 12, color: T.g4, marginTop: 8 }}>Sets your daily calorie & macro targets (editable later in Profile).</div>
+          </div>
+        )}
+        {step === 2 && (
+          <div style={{ animation: "fadeUp .35s ease both" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+              <div style={{ display: "flex", background: T.g1, borderRadius: 99, padding: 3 }}>
+                {["imperial", "metric"].map(u => (
+                  <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.white : T.g4 }}>{u === "imperial" ? "lbs" : "kg"}</button>
+                ))}
+              </div>
+            </div>
+            <AuthField label={`Current weight (${units === "metric" ? "kg" : "lbs"})`} inputMode="decimal" value={weight} onChange={e => setWeight(e.target.value)} placeholder={units === "metric" ? "79" : "175"} />
+            <AuthField label={`Target weight (${units === "metric" ? "kg" : "lbs"})`} inputMode="decimal" value={target} onChange={e => setTarget(e.target.value)} placeholder={units === "metric" ? "84" : "185"} />
+          </div>
+        )}
+        {err && <div style={{ fontSize: 13, color: T.error, marginTop: 12 }}>⚠️ {err}</div>}
+      </div>
+      <div style={{ padding: "16px 22px 28px", display: "flex", gap: 10 }}>
+        {step > 0 && <Btn label="Back" onPress={() => setStep(s => s - 1)} style={{ flex: 1 }} />}
+        {step < 2
+          ? <Btn label="Continue" primary onPress={() => setStep(s => s + 1)} style={{ flex: 2 }} />
+          : <Btn label={busy ? "Saving…" : "Start cooking 🌿"} primary onPress={finish} style={{ flex: 2 }} />}
+      </div>
+    </Frame>
+  );
+}
+
+// ── Root: auth gate → onboarding → app; demo mode when Supabase is absent ──
+export default function NutriCookApp() {
+  // Demo mode: no Supabase configured → run exactly as v2.5 (session-only mock).
+  if (!hasSupabase) return <MainApp boot={null} mode="demo" />;
+
+  const [phase, setPhase] = useState("loading"); // loading | auth | onboarding | ready
+  const [session, setSession] = useState(null);
+  const [boot, setBoot] = useState(null);
+  const [needName, setNeedName] = useState("");
+
+  const bootstrap = async sess => {
+    if (!sess) { setPhase("auth"); return; }
+    const { data: prof } = await supabase.from("profiles").select("*").maybeSingle();
+    if (!prof || !prof.onboarded) {
+      setNeedName(sess.user?.user_metadata?.name || "");
+      setPhase("onboarding");
+      return;
+    }
+    try {
+      const data = await db.loadAll();
+      setBoot(data);
+      setPhase("ready");
+    } catch {
+      setBoot({ profile: prof });
+      setPhase("ready");
+    }
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); bootstrap(data.session); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => {
+      setSession(sess);
+      if (!sess) { setBoot(null); setPhase("auth"); }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => { await supabase.auth.signOut(); setBoot(null); setPhase("auth"); };
+
+  if (phase === "loading") return (
+    <Frame>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: 34, animation: "spin 1.4s linear infinite" }}>🌀</span>
+      </div>
+    </Frame>
+  );
+  if (phase === "auth") return <AuthScreen />;
+  if (phase === "onboarding") return <OnboardingScreen email={session?.user?.email} defaultName={needName} onDone={() => bootstrap(session)} />;
+  return <MainApp boot={boot} mode="live" email={session?.user?.email} onSignOut={signOut} />;
 }
