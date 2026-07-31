@@ -551,7 +551,7 @@ function MiniSpark({ data }) {
   );
 }
 
-function HomeScreen({ setTab, userName = USER.name, targets = TARGETS, live = false, mealLogs = [], initialWater, onWater, onMarkMeal, streak = USER.streak, weights = WEIGHT_SEED }) {
+function HomeScreen({ setTab, userName = USER.name, targets = TARGETS, live = false, mealLogs = [], initialWater, onWater, onMarkMeal, streak = USER.streak, weights = WEIGHT_SEED, firstRun = false }) {
   // "Eaten today" drives the hero number. In live mode it's seeded from
   // meal_logs and written through on every tap; in demo it's seeded from the
   // meals' static done-state so the screen is still interactive with zero setup.
@@ -568,7 +568,7 @@ function HomeScreen({ setTab, userName = USER.name, targets = TARGETS, live = fa
   };
   const meals = MEALS.map(m => ({ ...m, done: eaten.has(m.type) }));
   const consumed = meals.filter(m => m.done).reduce((a, m) => ({ kcal: a.kcal + m.kcal, protein: a.protein + m.protein, carbs: a.carbs + m.carbs, fat: a.fat + m.fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
-  const [water, setWater] = useState(initialWater ?? CONSUMED.water);
+  const [water, setWater] = useState(initialWater ?? (live ? 0 : CONSUMED.water));
   const changeWater = n => { setWater(n); onWater?.(n); };
   const rem = Math.max(0, targets.kcal - consumed.kcal);
   const doneCount = meals.filter(m => m.done).length;
@@ -577,6 +577,56 @@ function HomeScreen({ setTab, userName = USER.name, targets = TARGETS, live = fa
   const lastW = weights[weights.length - 1]?.w ?? USER.weightLbs;
   const dateLabel = NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const greeting = NOW.getHours() < 12 ? "Good morning" : NOW.getHours() < 18 ? "Good afternoon" : "Good evening";
+
+  // Day-one experience: a fresh live account with no logged activity gets a
+  // single question + one action instead of a wall of zeroes.
+  if (firstRun) return (
+    <div style={{ padding: "16px 16px 8px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 22 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: T.g4, fontWeight: 500, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 8 }}>{dateLabel}</div>
+          <div style={{ fontSize: 26, fontWeight: 600, color: T.black, letterSpacing: -0.7 }}>Welcome, {userName}</div>
+        </div>
+        <div style={{ width: 38, height: 38, borderRadius: 99, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: T.mintDark }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
+      </div>
+
+      <div style={{ ...card, padding: "28px 24px", marginBottom: 14, animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+          {["#F1EAD9", "#E4EDE6", "#E2EAEC"].map(c => <div key={c} style={{ width: 60, height: 74, borderRadius: 18, background: c }} />)}
+          <div style={{ width: 60, height: 74, borderRadius: 18, border: `1.5px dashed ${T.g3}`, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="plus" size={20} color={T.g3} sw={1.8} /></div>
+        </div>
+        <div style={{ fontSize: 21, fontWeight: 600, color: T.black, letterSpacing: -0.5, lineHeight: 1.25, marginBottom: 10, maxWidth: 280 }}>Let's build your first day of meals</div>
+        <div style={{ fontSize: 14, color: T.g5, lineHeight: 1.6, marginBottom: 22, maxWidth: 300 }}>Tell the coach what's in your kitchen. It writes three recipes that fit your goal, and today's plan fills in from there.</div>
+        <button onClick={() => setTab("ai")} style={{ width: "100%", height: 52, border: "none", borderRadius: 18, background: T.mintDark, color: T.onAccent, fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer", marginBottom: 12 }}><Icon name="sparkles" size={17} color={T.onAccent} sw={1.6} />Add ingredients</button>
+        <button onClick={() => setTab("ai")} style={{ width: "100%", height: 50, border: `1px solid ${T.g2}`, borderRadius: 18, background: "transparent", color: T.g6, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer" }}><Icon name="camera" size={16} color={T.g6} />Scan my fridge instead</button>
+      </div>
+
+      <div style={{ ...card, background: T.mintLight, border: "none", padding: "20px 22px", marginBottom: 14 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: T.mintDark, marginBottom: 14 }}>Set up in two minutes</div>
+        {[["Pick your goal", true], ["Log your weight", true], ["Generate your first recipes", false], ["Fill the week", false]].map(([label, done], i, arr) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: i < arr.length - 1 ? 12 : 0 }}>
+            {done
+              ? <span style={{ width: 20, height: 20, borderRadius: 99, background: T.mintDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="check" size={11} color={T.onAccent} sw={2.8} /></span>
+              : <span style={{ width: 20, height: 20, borderRadius: 99, border: `1.5px solid ${T.g3}`, flexShrink: 0 }} />}
+            <span style={{ fontSize: 14, color: done ? T.g5 : T.g6, fontWeight: done ? 400 : 500, textDecoration: done ? "line-through" : "none" }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...card, padding: "22px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <Icon name="droplet" size={16} color={T.water} sw={1.7} />
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.black }}>Start with water</span>
+        </div>
+        <div style={{ fontSize: 13.5, color: T.g5, lineHeight: 1.6, marginBottom: 16 }}>{targets.water} glasses today. Tap one when you drink it — it's the easiest streak to keep.</div>
+        <div style={{ display: "flex", gap: 5 }}>
+          {Array(targets.water).fill(0).map((_, i) => (
+            <div key={i} onClick={() => changeWater(i + 1 === water ? i : i + 1)} title="Tap to log water" style={{ flex: 1, height: 34, borderRadius: 12, cursor: "pointer", background: i < water ? T.water : "transparent", border: i < water ? "none" : `1.5px dashed ${T.g3}`, transition: "all .2s" }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding: "16px 16px 8px" }}>
@@ -1640,6 +1690,9 @@ function MainApp({ boot, mode, email, onSignOut }) {
   const [tryList, setTryList] = useState(boot?.tryList || []);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const mealLogs = boot?.mealLogs || [];
+  // A freshly-onboarded live account with no logged activity yet gets the
+  // day-one Home (empty state) instead of the seeded demo meals.
+  const firstRun = live && !mealLogs.length && !(boot?.favorites?.length) && !(boot?.tryList?.length);
 
   // Write-through helpers: persist to Supabase in live mode, no-op in demo.
   const persist = (fn, ...args) => { if (live) Promise.resolve(fn(...args)).catch(() => {}); };
@@ -1737,7 +1790,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
           <div key={tab} style={{ animation: "slideUp 0.32s cubic-bezier(.22,.68,0,1) both" }}>
-          {tab === "home" && <HomeScreen setTab={setTab} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} streak={streak} weights={weights} />}
+          {tab === "home" && <HomeScreen setTab={setTab} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} streak={streak} weights={weights} firstRun={firstRun} />}
           {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
           {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}

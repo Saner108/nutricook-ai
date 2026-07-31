@@ -14,6 +14,13 @@
   list with check circles, and a compact water + weight-trend row. All live
   data (eaten totals, water, weight) is preserved and now interactive in demo
   mode too. Footer → v3.1.
+- **First-run empty state.** A freshly-onboarded account with no logged
+  activity gets a day-one Home (mockup 1i): one question ("Let's build your
+  first day of meals") + two actions, a "set up in two minutes" checklist, and
+  a "start with water" card — instead of a wall of zeroes. Fresh live accounts
+  now start water at 0 rather than the demo seed.
+- **Dark Pro sheet.** The paywall (mockup 1h) inherits dark mode from the token
+  system — price-first, sage CTA, plain benefit lines.
 
 
 ## v3.0.0 — 2026-07-31
