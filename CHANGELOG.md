@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.2.0 — 2026-07-31
+
+### Sign up with Apple, Google, or email
+- **Three ways in.** The auth screen now offers **Continue with Apple** and
+  **Continue with Google** (provider-generic `signInWithOAuth`) alongside
+  email/password, split by a subtle "or" divider. Brand marks are inline SVG:
+  the Apple logo uses `currentColor` so it flips for light/dark, the Google
+  mark stays multicolor on both surfaces.
+- **Clearer signup outcomes.** Email signup now reads the `signUp` result and
+  shows the right message instead of a one-size-fits-all "account created":
+  a live session ("Setting up your kitchen…", app transitions), a pending
+  confirmation ("Check your inbox to confirm your email, then sign in"), or an
+  already-registered email ("switch to Sign in") — the last detected via
+  Supabase's empty-`identities` signal. The name is passed in signup metadata
+  and `emailRedirectTo` points back at the app origin.
+- Footer → v3.2.
+
+> Setup note (Cesar): Apple/Google buttons need their providers enabled in
+> Supabase → Authentication → Providers (Google is already configured; Apple
+> needs a Services ID + key). For frictionless email signup, toggle off
+> "Confirm email" in the same section.
+
+
 ## v3.1.0 — 2026-07-31
 
 ### Dark mode + Home hero rebuild

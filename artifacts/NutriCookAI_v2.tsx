@@ -1579,7 +1579,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         </div>
       )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v3.1</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v3.2</div>
         <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude</div>
       </div>
     </div>
@@ -1840,6 +1840,32 @@ function AuthField({ label, ...props }) {
 }
 
 // ── Auth screen (email/password + Google) ────────────────
+function BrandMark({ provider }) {
+  if (provider === "apple") return (
+    <svg width="16" height="18" viewBox="0 0 384 512" aria-hidden="true" style={{ display: "block" }}>
+      <path fill="currentColor" d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/>
+    </svg>
+  );
+  // google — multicolor mark, renders on light and dark surfaces
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true" style={{ display: "block" }}>
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+  );
+}
+function OAuthButton({ provider, label, onPress }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button onClick={onPress} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ width: "100%", padding: "12px", borderRadius: 12, border: `1.5px solid ${T.g2}`, background: hover ? T.g1 : T.white, color: T.g6, fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 10, transition: "background .15s ease" }}>
+      <BrandMark provider={provider} />
+      <span>{label}</span>
+    </button>
+  );
+}
 function AuthScreen() {
   const [mode, setMode] = useState("signin"); // signin | signup
   const [name, setName] = useState("");
@@ -1856,9 +1882,18 @@ function AuthScreen() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({ email: email.trim(), password: pw, options: { data: { name: name.trim() } } });
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: pw, options: { data: { name: name.trim() }, emailRedirectTo: window.location.origin } });
         if (error) throw error;
-        setMsg("Account created — you can start cooking. (If email confirmation is on, check your inbox first.)");
+        // identities empty => the email is already registered (Supabase hides this to prevent enumeration)
+        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setErr("That email is already registered — switch to Sign in.");
+        } else if (data?.session) {
+          // confirmation is off: session is live, the auth listener transitions into the app
+          setMsg("Welcome! Setting up your kitchen…");
+        } else {
+          // confirmation is on: no session until the email link is clicked
+          setMsg("Check your inbox to confirm your email, then come back and sign in.");
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
         if (error) throw error;
@@ -1869,13 +1904,14 @@ function AuthScreen() {
       setBusy(false);
     }
   };
-  const google = async () => {
+  const oauth = async (provider) => {
     setErr(null);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
       if (error) throw error;
     } catch (e) {
-      setErr(e?.message || "Google sign-in isn't available — use email instead.");
+      const nice = { google: "Google", apple: "Apple" }[provider] || provider;
+      setErr(e?.message || `${nice} sign-in isn't available yet — use email instead.`);
     }
   };
 
@@ -1893,8 +1929,14 @@ function AuthScreen() {
           <AuthField label="Password" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === "Enter" && submit()} />
           {err && <div style={{ fontSize: 13, color: T.error, marginBottom: 10 }}>{err}</div>}
           {msg && <div style={{ fontSize: 13, color: T.mintDark, marginBottom: 10 }}>✓ {msg}</div>}
-          <Btn label={busy ? "…" : mode === "signup" ? "Create account" : "Sign in"} primary onPress={submit} style={{ width: "100%", marginBottom: 10 }} />
-          <button onClick={google} style={{ width: "100%", padding: "13px", borderRadius: 12, border: `1.5px solid ${T.g2}`, background: T.white, color: T.g6, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Continue with Google</button>
+          <Btn label={busy ? "…" : mode === "signup" ? "Create account" : "Sign in"} primary onPress={submit} style={{ width: "100%", marginBottom: 14 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "2px 0 12px" }}>
+            <div style={{ flex: 1, height: 1, background: T.g2 }} />
+            <span style={{ fontSize: 12, color: T.g4, fontWeight: 600 }}>or</span>
+            <div style={{ flex: 1, height: 1, background: T.g2 }} />
+          </div>
+          <OAuthButton provider="apple" label="Continue with Apple" onPress={() => oauth("apple")} />
+          <OAuthButton provider="google" label="Continue with Google" onPress={() => oauth("google")} />
         </div>
         <div style={{ textAlign: "center", marginTop: 16 }}>
           <span style={{ fontSize: 13, color: T.g4 }}>{mode === "signup" ? "Already have an account?" : "New here?"} </span>
