@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.0.0 — 2026-07-31
+
+### Visual redesign — "Premium pass"
+A full reskin of the shipped app to a calmer, more premium system. No logic
+changed: Supabase auth/persistence, the streaming AI generator, server-side
+quota, Stripe, and the demo-mode fallback all behave exactly as in v2.6.
+
+- **New design system.** Warm neutral surfaces (off-white `#F7F6F3`, cream
+  `#F1EDE3`) with a single muted forest-green accent (`#2F5D45`) doing all the
+  work. Softer single-shadow elevation, 24px card radii, warm-gray text ramp.
+  Macro colors moved to forest / clay / gold / slate.
+- **Lucide line icons everywhere.** Emoji replaced by a consistent 1.7-stroke
+  Lucide icon set for all chrome — bottom nav, FAB, headers, settings rows,
+  water/streak/target markers, grocery categories, achievements, paywall.
+- **Typographic dish tiles.** Meal thumbnails are now monogram tiles tinted by
+  meal slot (breakfast cream, lunch sage, dinner slate, snack clay) instead of
+  food emoji — on Home, Plan, and the Recipe Box.
+- **Screen polish.** Forest hero cards, de-emoji'd banners and empty states,
+  refreshed paywall (check-list + forest CTA), monogram avatars, "Basket" and
+  "Today"/"You" nav labels. Footer bumped to v3.0.
+
+Light theme ships now; full dark theme is the next step.
+
+
 ## v2.6.0 — 2026-07-21
 
 ### Phase 4 — Backend, Auth & Persistence (Supabase)

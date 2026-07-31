@@ -3,16 +3,88 @@ import { hasSupabase, supabase } from "../src/lib/supabase.js";
 import { isProActive, computeStreak } from "../src/lib/quota.js";
 import * as db from "../src/lib/db.js";
 
-// ── Tokens ──────────────────────────────────────────────
+// ── Tokens (v3.0 — warm neutrals + a single forest-green accent) ─────────
 const T = {
-  mint: "#A8F5D3", mintMid: "#3EC98A", mintDark: "#1A8C5F", mintLight: "#F0FBF6",
-  bg: "#F5F5F7", white: "#FFFFFF", black: "#1C1C1E",
-  g1: "#F5F5F7", g2: "#E5E5EA", g3: "#C7C7CC", g4: "#8E8E93", g5: "#636366", g6: "#3A3A3C",
-  success: "#34C759", warn: "#FF9500", error: "#FF3B30", blue: "#007AFF",
-  protein: "#3EC98A", carbs: "#FFB340", fat: "#FF6B6B", water: "#5AC8FA",
+  // Accent family (one green does all the work)
+  mint: "#A9CBBA",        // light sage — marks/text on dark forest surfaces
+  mintMid: "#3F7A5A",
+  mintDark: "#2F5D45",    // primary accent — CTAs, active states, links
+  mintLight: "#E9EFEA",   // accent tint background
+  deep: "#1E3D2E",        // deep forest — dark hero cards
+  // Surfaces + ink
+  bg: "#F7F6F3", white: "#FFFFFF", black: "#1B1A17",
+  // Warm neutral ramp
+  g1: "#F2F1EC", g2: "#E7E3DA", g3: "#D5D0C5", g4: "#9C978C", g5: "#6E6A61", g6: "#3D3A34",
+  // Status
+  success: "#2F5D45", warn: "#C8763C", error: "#B23B2E", blue: "#4A7080",
+  // Macros
+  protein: "#3F7A5A", carbs: "#C8763C", fat: "#B9A05B", water: "#6E8FA0",
 };
-const shadow = { sm: "0 1px 6px rgba(0,0,0,0.06)", md: "0 2px 16px rgba(0,0,0,0.08)", lg: "0 8px 32px rgba(0,0,0,0.12)" };
-const card = { background: T.white, borderRadius: 20, padding: "20px", boxShadow: shadow.md };
+const FOREST = `linear-gradient(160deg, #2F5D45 0%, #1E3D2E 100%)`;
+const shadow = {
+  sm: "0 1px 2px rgba(27,26,23,0.05)",
+  md: "0 1px 2px rgba(27,26,23,0.04), 0 14px 30px -22px rgba(27,26,23,0.22)",
+  lg: "0 1px 2px rgba(27,26,23,0.05), 0 24px 48px -24px rgba(27,26,23,0.30)",
+};
+const card = { background: T.white, borderRadius: 24, padding: "20px", boxShadow: shadow.md };
+
+// ── Lucide line icons (1.7 stroke, currentColor) ─────────
+const ICONS = {
+  home: <><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>,
+  calendar: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>,
+  basket: <><path d="m15 11-1 9" /><path d="m19 11-4-7" /><path d="M2 11h20" /><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4" /><path d="m5 11 4-7" /><path d="m9 11 1 9" /></>,
+  user: <><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></>,
+  sparkles: <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />,
+  camera: <><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" /><circle cx="12" cy="13" r="3" /></>,
+  search: <><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></>,
+  plus: <><path d="M5 12h14" /><path d="M12 5v14" /></>,
+  check: <path d="M20 6 9 17l-5-5" />,
+  chevronRight: <path d="m9 18 6-6-6-6" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
+  chevronLeft: <path d="m15 18-6-6 6-6" />,
+  arrowLeft: <><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></>,
+  flame: <path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" />,
+  droplet: <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />,
+  trendUp: <><path d="M16 7h6v6" /><path d="m22 7-8.5 8.5-5-5L2 17" /></>,
+  clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+  heart: <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />,
+  bookmark: <path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z" />,
+  settings: <><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" /></>,
+  x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+  bulb: <><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5" /><path d="M9 18h6" /><path d="M10 22h4" /></>,
+  leaf: <><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></>,
+  infinity: <path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8" />,
+  utensils: <><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /><path d="M7 2v20" /><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" /></>,
+  target: <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>,
+  shield: <><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></>,
+  link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+  bell: <><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></>,
+  drumstick: <><path d="M16.4 13.7A6.5 6.5 0 1 0 6.28 6.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3" /><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1-2.29 7.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5" /><circle cx="12.5" cy="8.5" r="2.5" /></>,
+  salad: <><path d="M7 21h10" /><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" /><path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1" /><path d="m13 12 4-4" /></>,
+  wheat: <><path d="M2 22 16 8" /><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /><path d="M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /><path d="M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /></>,
+  apple: <><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z" /><path d="M10 2c1 .5 2 2 2 5" /></>,
+  milk: <><path d="M8 2h8" /><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2" /><path d="M7 15a6.47 6.47 0 0 1 5 0 6.472 6.472 0 0 0 5 0" /></>,
+};
+function Icon({ name, size = 20, color = "currentColor", sw = 1.7, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0, ...style }}>
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+// Typographic monogram dish tile — tint keyed to the meal slot (no photos, no emoji).
+const SLOT_TINT = {
+  Breakfast: ["#F1EAD9", "#A8853F"], Lunch: ["#E4EDE6", "#3F7A5A"],
+  Dinner: ["#E2EAEC", "#4A7080"], Snack: ["#F0E7E2", "#A4735E"],
+};
+function DishTile({ name, slot, size = 56, radius = 15 }) {
+  const [bg, fg] = SLOT_TINT[slot] || SLOT_TINT.Lunch;
+  const letter = String(name || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <div style={{ width: size, height: size, borderRadius: radius, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: Math.round(size * 0.4), fontWeight: 600, letterSpacing: -0.5, fontFamily: "-apple-system,'SF Pro Display',Inter,system-ui,sans-serif" }}>{letter}</div>
+  );
+}
 
 // ── Static Data ──────────────────────────────────────────
 const USER = { name: "Cesar", goal: "Muscle Gain", weightLbs: 175, targetLbs: 185, streak: 12 };
@@ -75,8 +147,10 @@ const DIETARY_OPTS = ["Vegan","Vegetarian","Gluten-Free","Dairy-Free","Keto","Lo
 const GOAL_OPTS = ["Fat Loss","Muscle Gain","Maintenance","High Protein","Low Carb","Balanced"];
 
 const ACHIEVEMENTS = [
-  { emoji:"🔥", label:"12-Day Streak" }, { emoji:"💪", label:"Protein Goal x7" },
-  { emoji:"🥗", label:"Meal Planner" }, { emoji:"💧", label:"Hydration Pro" },
+  { icon:"flame", tint:"#F1EAD9", fg:"#A8853F", label:"12-Day Streak" },
+  { icon:"target", tint:"#E9EFEA", fg:"#2F5D45", label:"Protein Goal x7" },
+  { icon:"salad", tint:"#E4EDE6", fg:"#3F7A5A", label:"Meal Planner" },
+  { icon:"droplet", tint:"#E2EAEC", fg:"#4A7080", label:"Hydration Pro" },
 ];
 
 const WEIGHT_SEED = [
@@ -176,7 +250,7 @@ function Btn({ label, onPress, primary, small, style: st }) {
     <button onClick={onPress}
       onMouseDown={() => setPressed(true)} onMouseUp={() => setPressed(false)} onMouseLeave={() => setPressed(false)}
       style={{
-        padding: small ? "8px 16px" : "14px 24px", borderRadius: 14, border: "none",
+        padding: small ? "8px 16px" : "14px 24px", borderRadius: 16, border: "none",
         background: primary ? T.mintDark : T.g1, color: primary ? T.white : T.g6,
         fontSize: small ? 13 : 15, fontWeight: 700, cursor: "pointer",
         transform: pressed ? "scale(0.97)" : "scale(1)", transition: "transform 0.1s, background 0.15s",
@@ -194,14 +268,12 @@ function MealCard({ meal, compact, isFav, onFav }) {
   const diffColor = { Easy: T.success, Medium: T.warn, Hard: T.error }[meal.difficulty];
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 12 }}>
-      {/* Color bar by type */}
+      {/* Accent bar by state */}
       <div style={{ height: 4, background: meal.done ? T.mintDark : T.g2 }} />
       <div style={{ padding: "16px 18px" }}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          {/* Emoji thumbnail */}
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: meal.done ? T.mintLight : T.g1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>
-            {meal.emoji}
-          </div>
+          {/* Monogram thumbnail */}
+          <DishTile name={meal.name} slot={meal.type} size={56} radius={16} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: T.g4, textTransform: "uppercase", letterSpacing: 0.8 }}>{meal.type}</span>
@@ -235,7 +307,7 @@ function MealCard({ meal, compact, isFav, onFav }) {
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn label="View Recipe" small onPress={() => setOpen(!open)} style={{ flex: 1 }} />
             <Btn label="Swap" small onPress={() => {}} style={{ flex: 1 }} />
-            <button onClick={() => (onFav ? onFav(meal) : setLocalFav(f => !f))} style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: fav ? T.mintLight : T.g1, cursor: "pointer", fontSize: 16, color: fav ? T.error : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>{fav ? "♥" : "♡"}</button>
+            <button onClick={() => (onFav ? onFav(meal) : setLocalFav(f => !f))} style={{ width: 40, height: 40, borderRadius: 14, border: `1px solid ${fav ? T.mintDark : T.g2}`, background: fav ? T.mintLight : T.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: fav ? T.mintDark : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}><Icon name="heart" size={17} color={fav ? T.mintDark : T.g5} sw={fav ? 2.2 : 1.7} /></button>
           </div>
         )}
         {open && (
@@ -286,15 +358,15 @@ function AICard({ recipe, index, onSave, onReplace }) {
   return (
     <div style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 14, animation: `fadeUp 0.4s ease ${index * 0.12}s both` }}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, #1A3A2A 0%, #1A8C5F 100%)`, padding: "18px 18px 14px" }}>
+      <div style={{ background: FOREST, padding: "18px 18px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-          <Pill text={`Option ${index + 1}`} color={T.mint} bg="rgba(168,245,211,0.2)" />
-          <Pill text={recipe.difficulty} color="#1A3A2A" bg={diffColor} />
+          <Pill text={`Option ${index + 1}`} color={T.mint} bg="rgba(169,203,186,0.18)" />
+          <Pill text={recipe.difficulty} color={T.white} bg={diffColor} />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 800, color: T.white, lineHeight: 1.2, marginBottom: 8 }}>{recipe.name}</div>
-        <div style={{ display: "flex", gap: 16, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
-          <span>⏱ {recipe.prepTime}</span>
-          <span>👤 {recipe.servings} servings</span>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.white, lineHeight: 1.25, marginBottom: 8, letterSpacing: -0.3 }}>{recipe.name}</div>
+        <div style={{ display: "flex", gap: 14, fontSize: 12, color: "rgba(255,255,255,0.6)", alignItems: "center" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Icon name="clock" size={13} color="rgba(255,255,255,0.6)" />{recipe.prepTime}</span>
+          <span>{recipe.servings} servings</span>
           <span style={{ color: T.mint, fontWeight: 700 }}>{recipe.macros.calories} kcal</span>
         </div>
       </div>
@@ -313,12 +385,12 @@ function AICard({ recipe, index, onSave, onReplace }) {
           </div>
         )}
         <button onClick={() => setOpen(!open)} style={{
-          width: "100%", background: open ? T.mintLight : T.g1, border: `1.5px solid ${open ? T.mint : T.g2}`,
-          borderRadius: 12, padding: "10px 14px", cursor: "pointer", display: "flex",
-          justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 700, color: T.mintDark,
+          width: "100%", background: open ? T.mintLight : T.g1, border: `1px solid ${open ? T.mintDark : T.g2}`,
+          borderRadius: 14, padding: "11px 14px", cursor: "pointer", display: "flex",
+          justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 600, color: T.mintDark,
         }}>
-          <span>{open ? "Hide" : "Show"} Steps ({recipe.steps.length})</span>
-          <span style={{ fontSize: 10, transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
+          <span>{open ? "Hide" : "Show"} steps ({recipe.steps.length})</span>
+          <span style={{ display: "flex", transform: open ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><Icon name="chevronDown" size={16} color={T.mintDark} /></span>
         </button>
         {open && (
           <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
@@ -335,24 +407,25 @@ function AICard({ recipe, index, onSave, onReplace }) {
           <Btn label={saved ? "✓ Saved" : "Save"} onPress={() => { if (!saved && onSave) onSave(recipe); setSaved(s => !s); }} style={{ flex: 1, color: saved ? T.mintDark : undefined, background: saved ? T.mintLight : undefined }} />
         </div>
         {saved && recipe.ingredients && recipe.ingredients.length > 0 && (
-          <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>Saved to Want-to-Try · 🛒 ingredients added to Grocery</div>
+          <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>Saved to Want to Try · ingredients added to Basket</div>
         )}
         {/* AI Remix agent */}
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.g1}` }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: T.g4, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
-            {remixing ? "🌀 Remixing this recipe…" : "✨ Remix with AI"}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: T.g4, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>
+            <Icon name="sparkles" size={13} color={T.mintDark} sw={1.6} />
+            {remixing ? "Remixing this recipe…" : "Remix with AI"}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, opacity: remixing ? 0.5 : 1 }}>
-            {[["🌶 Spicier", "Make it noticeably spicier"], ["💪 More protein", "Increase the protein significantly"], ["🔥 Fewer calories", "Reduce the calories while keeping it satisfying"], ["x2 Servings", "Double the servings and scale ingredients"]].map(([label, instruction]) => (
+            {[["Spicier", "Make it noticeably spicier"], ["More protein", "Increase the protein significantly"], ["Fewer calories", "Reduce the calories while keeping it satisfying"], ["×2 servings", "Double the servings and scale ingredients"]].map(([label, instruction]) => (
               <button key={label} onClick={() => remix(instruction)} disabled={remixing} style={{
-                padding: "6px 12px", borderRadius: 99, border: `1.5px solid ${T.g2}`, background: T.white,
-                color: T.g5, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                padding: "7px 13px", borderRadius: 99, border: `1px solid ${T.g2}`, background: T.white,
+                color: T.g5, fontSize: 12, fontWeight: 500, cursor: "pointer",
               }}>{label}</button>
             ))}
             <button onClick={() => setSwapMode(s => !s)} disabled={remixing} style={{
-              padding: "6px 12px", borderRadius: 99, border: `1.5px solid ${swapMode ? T.mintDark : T.g2}`, background: swapMode ? T.mintLight : T.white,
-              color: swapMode ? T.mintDark : T.g5, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            }}>🔄 Swap ingredient</button>
+              padding: "7px 13px", borderRadius: 99, border: `1px solid ${swapMode ? T.mintDark : T.g2}`, background: swapMode ? T.mintLight : T.white,
+              color: swapMode ? T.mintDark : T.g5, fontSize: 12, fontWeight: 500, cursor: "pointer",
+            }}>Swap ingredient</button>
           </div>
           {swapMode && (
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -363,7 +436,7 @@ function AICard({ recipe, index, onSave, onReplace }) {
               <Btn small label="Swap" primary onPress={() => swapVal.trim() && remix(`Swap out: ${swapVal.trim()}. Replace it with something that fits the recipe`)} />
             </div>
           )}
-          {remixErr && <div style={{ fontSize: 12, color: T.error, marginTop: 8 }}>⚠️ {remixErr}</div>}
+          {remixErr && <div style={{ fontSize: 12, color: T.error, marginTop: 8 }}>{remixErr}</div>}
         </div>
       </div>
     </div>
@@ -467,15 +540,15 @@ function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, t
       {/* Greeting */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 14, color: T.g4, fontWeight: 500 }}>{NOW.getHours() < 12 ? "Good morning," : NOW.getHours() < 18 ? "Good afternoon," : "Good evening,"}</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>{userName} 👋</div>
+          <div style={{ fontSize: 12, color: T.g4, fontWeight: 500, letterSpacing: 0.6, textTransform: "uppercase" }}>{NOW.getHours() < 12 ? "Good morning" : NOW.getHours() < 18 ? "Good afternoon" : "Good evening"}</div>
+          <div style={{ fontSize: 27, fontWeight: 600, color: T.black, letterSpacing: -0.7, marginTop: 4 }}>{userName}</div>
         </div>
-        <div style={{ width: 44, height: 44, borderRadius: 99, background: `linear-gradient(135deg, ${T.mintDark}, ${T.mint})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>💪</div>
+        <div style={{ width: 40, height: 40, borderRadius: 99, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: T.mintDark }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
       </div>
 
       {/* Progress Card */}
-      <div style={{ ...card, background: `linear-gradient(140deg, #0E2A1C 0%, #1A5C3A 60%, #1E8C5F 100%)`, marginBottom: 14, padding: "22px 20px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's Progress</div>
+      <div style={{ ...card, background: FOREST, marginBottom: 14, padding: "22px 20px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's progress</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Ring pct={consumed.kcal / targets.kcal} color={T.mint} size={120} stroke={10}>
             <div style={{ fontSize: 24, fontWeight: 800, color: T.white, lineHeight: 1 }}>{rem}</div>
@@ -490,7 +563,7 @@ function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, t
         {/* Water */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>💧 Water</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}><Icon name="droplet" size={14} color={T.water} />Water</span>
             <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{water}/{targets.water} glasses</span>
           </div>
           <div style={{ display: "flex", gap: 5 }}>
@@ -503,10 +576,10 @@ function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, t
       </div>
 
       {/* AI Banner */}
-      <div style={{ ...card, background: T.mintLight, border: `1.5px solid ${T.mint}`, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 18px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: "0.06s" }}>
-        <div style={{ fontSize: 28, lineHeight: 1 }}>🌿</div>
+      <div style={{ ...card, background: T.mintLight, border: `1px solid rgba(47,93,69,0.14)`, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 18px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: "0.06s" }}>
+        <div style={{ width: 40, height: 40, borderRadius: 13, background: "rgba(47,93,69,0.10)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="leaf" size={20} color={T.mintDark} sw={1.6} /></div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, marginBottom: 4 }}>AI Meal Planner</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, marginBottom: 4 }}>AI meal planner</div>
           <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.5, marginBottom: 12 }}>Based on your goals and available ingredients, we've created today's meal plan.</div>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn label="Generate New Plan" primary small onPress={() => setTab("ai")} style={{ fontSize: 12 }} />
@@ -586,12 +659,12 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
       <div style={{ fontSize: 22, fontWeight: 800, color: T.black, marginBottom: 12, letterSpacing: -0.3 }}>Weekly Plan</div>
       {/* Week pager */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <button onClick={() => weekOffset > -3 && setWeekOffset(o => o - 1)} style={pagerBtn(weekOffset > -3)}>‹</button>
+        <button onClick={() => weekOffset > -3 && setWeekOffset(o => o - 1)} style={pagerBtn(weekOffset > -3)}><Icon name="chevronLeft" size={16} color={T.g6} /></button>
         <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: T.black }}>{weekLabel}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>{weekLabel}</div>
           <div style={{ fontSize: 11, color: T.g4, marginTop: 1 }}>{fmt(weekDates[0])} – {fmt(weekDates[6])}</div>
         </div>
-        <button onClick={() => weekOffset < 0 && setWeekOffset(o => o + 1)} style={pagerBtn(weekOffset < 0)}>›</button>
+        <button onClick={() => weekOffset < 0 && setWeekOffset(o => o + 1)} style={pagerBtn(weekOffset < 0)}><Icon name="chevronRight" size={16} color={T.g6} /></button>
       </div>
       {/* Week strip */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
@@ -611,7 +684,7 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
       {isPast && (
         <div style={{ ...card, marginBottom: 12, padding: "16px 18px", animation: "popIn .25s ease both" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>📒 Daily Summary</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}><Icon name="calendar" size={13} color={T.g5} sw={1.6} />Daily summary</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: histTotals.kcal <= targets.kcal ? T.mintDark : T.warn }}>{histTotals.kcal} / {targets.kcal} kcal</span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -636,7 +709,9 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
               display: "flex", justifyContent: "space-between", alignItems: "center",
             }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 20 }}>{planned ? meal.emoji : "✨"}</span>
+                {planned
+                  ? <DishTile name={meal.name} slot={type} size={42} radius={13} />
+                  : <div style={{ width: 42, height: 42, borderRadius: 13, background: T.g1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="sparkles" size={18} color={T.g3} sw={1.6} /></div>}
                 <div style={{ textAlign: "left" }}>
                   <div style={{ fontSize: 11, color: T.g4, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.8 }}>{type}</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>{planned ? meal.name : "Not planned"}</div>
@@ -644,7 +719,7 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {planned && <span style={{ fontSize: 13, fontWeight: 700, color: T.g4 }}>{meal.kcal} kcal</span>}
-                <span style={{ fontSize: 12, color: T.g4, transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
+                <span style={{ display: "flex", color: T.g4, transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><Icon name="chevronDown" size={16} color={T.g4} /></span>
               </div>
             </button>
             {isOpen && planned && (
@@ -653,8 +728,8 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
               </div>
             )}
             {isOpen && !planned && (
-              <div style={{ ...card, marginTop: 6, padding: "20px", textAlign: "center", animation: "popIn .25s ease both" }}>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
+              <div style={{ ...card, marginTop: 6, padding: "24px", textAlign: "center", animation: "popIn .25s ease both" }}>
+                <div style={{ width: 48, height: 48, borderRadius: 15, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="sparkles" size={22} color={T.mintDark} sw={1.6} /></div>
                 <div style={{ fontSize: 14, color: T.g4 }}>No meal planned for this day.</div>
                 <Btn label="Generate with AI" primary small onPress={() => setTab("ai")} style={{ marginTop: 12 }} />
               </div>
@@ -663,9 +738,12 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
         );
       })}
       {/* Daily fun fact */}
-      <div style={{ ...card, marginTop: 16, background: T.mintLight, border: `1.5px solid ${T.mint}`, padding: "16px 18px" }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>💡 Did you know?</div>
-        <div style={{ fontSize: 13, color: T.g6, lineHeight: 1.6 }}>{FUN_FACTS[day % FUN_FACTS.length]}</div>
+      <div style={{ ...card, marginTop: 16, background: "#F1EDE3", border: "none", padding: "18px 20px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+        <Icon name="bulb" size={18} color="#A8853F" sw={1.6} style={{ marginTop: 2 }} />
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#8A6D33", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Did you know?</div>
+          <div style={{ fontSize: 13, color: "#4A4640", lineHeight: 1.6 }}>{FUN_FACTS[day % FUN_FACTS.length]}</div>
+        </div>
       </div>
     </div>
   );
@@ -712,7 +790,7 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
   const generate = async () => {
     if (loading) return;
     if (!ingredients.length) {
-      setError("Add at least one ingredient first — start typing to search, tap a quick-add, or 📷 Scan Fridge.");
+      setError("Add at least one ingredient first — start typing to search, tap a quick-add, or scan your fridge.");
       return;
     }
     if (!pro && usage.gen >= FREE_LIMITS.gen) { openPaywall(); return; }
@@ -785,9 +863,9 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
   if (step === "results") return (
     <div style={{ padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-        <button onClick={() => setStep("input")} style={{ width: 36, height: 36, borderRadius: 99, background: T.g1, border: "none", cursor: "pointer", fontSize: 18 }}>←</button>
+        <button onClick={() => setStep("input")} style={{ width: 36, height: 36, borderRadius: 99, background: T.white, boxShadow: shadow.sm, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="arrowLeft" size={17} color={T.g6} /></button>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: T.black, letterSpacing: -0.3 }}>Your Recipes</div>
+          <div style={{ fontSize: 22, fontWeight: 600, color: T.black, letterSpacing: -0.4 }}>Your recipes</div>
           <div style={{ fontSize: 12, color: T.g4 }}>
             {loading ? `Cooking up ideas for ${goal}…` : `${ingredients.slice(0, 3).join(", ")}${ingredients.length > 3 ? ` +${ingredients.length - 3} more` : ""}`}
           </div>
@@ -795,16 +873,14 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
       </div>
       {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} onSave={onSaveRecipe} onReplace={(idx, next) => setRecipes(prev => prev.map((x, j) => j === idx ? next : x))} />)}
       {loading && recipes.length < 3 && (
-        <div style={{ ...card, border: `1.5px dashed ${T.mintMid}`, background: T.mintLight, marginBottom: 14, padding: "18px", animation: "fadeUp 0.4s ease both" }}>
-          {streamName ? (
-            <div style={{ fontSize: 16, fontWeight: 800, color: T.mintDark, marginBottom: 6 }}>{streamName}</div>
-          ) : (
-            <div style={{ fontSize: 16, fontWeight: 800, color: T.mintDark, marginBottom: 6 }}>Thinking…</div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 16, display: "inline-block", animation: "spin 2s linear infinite" }}>🌀</span>
-            <span style={{ fontSize: 13, color: T.g5 }}>Writing recipe {recipes.length + 1} of 3…</span>
+        <div style={{ ...card, background: T.white, marginBottom: 14, padding: "20px", animation: "fadeUp 0.4s ease both" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ display: "inline-flex", animation: "spin 1.6s linear infinite", color: T.mintDark }}><Icon name="sparkles" size={16} color={T.mintDark} /></span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: T.g5 }}>Writing recipe {recipes.length + 1} of 3…</span>
           </div>
+          {streamName
+            ? <div style={{ fontSize: 16, fontWeight: 700, color: T.black, letterSpacing: -0.3 }}>{streamName}</div>
+            : <div style={{ fontSize: 16, fontWeight: 700, color: T.g4, letterSpacing: -0.3 }}>Thinking…</div>}
         </div>
       )}
     </div>
@@ -814,18 +890,21 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
     <div style={{ padding: "16px" }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>AI Meal Generator</div>
-        <div style={{ fontSize: 24, fontWeight: 800, color: T.black, letterSpacing: -0.4 }}>What's in your kitchen?</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+          <Icon name="sparkles" size={14} color={T.mintDark} sw={1.6} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1 }}>Nutrition coach</div>
+        </div>
+        <div style={{ fontSize: 27, fontWeight: 600, color: T.black, letterSpacing: -0.7 }}>What's in your kitchen?</div>
       </div>
 
       {/* Ingredient chips input */}
       <div style={{ ...card, padding: "16px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>Your Ingredients</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>Ingredients</div>
           <button onClick={() => { if (scanning) return; if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; } if (fileRef.current) fileRef.current.click(); }} style={{
-            border: `1.5px solid ${T.mintMid}`, background: T.mintLight, color: T.mintDark, borderRadius: 99,
-            padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: scanning ? 0.7 : 1,
-          }}>{scanning ? "⏳ Scanning…" : "📷 Scan Fridge"}</button>
+            display: "flex", alignItems: "center", gap: 6, border: `1px solid ${T.g2}`, background: "transparent", color: T.g6, borderRadius: 99,
+            padding: "7px 13px 7px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: scanning ? 0.7 : 1,
+          }}><Icon name="camera" size={14} color={T.g6} />{scanning ? "Scanning…" : "Scan fridge"}</button>
         </div>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFridgePhoto} style={{ display: "none" }} />
         <div onClick={() => inputRef.current?.focus()} style={{
@@ -870,7 +949,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             }}>+ {s}</button>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: start typing to search · tap a match to add it · or 📷 scan a photo of your fridge</div>
+        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: start typing to search · tap a match to add it · or scan a photo of your fridge</div>
       </div>
 
       {/* Goal selector */}
@@ -903,14 +982,15 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         </div>
       </div>
 
-      {error && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "12px 16px", marginBottom: 14, color: T.error, fontSize: 13 }}>⚠️ {error}</div>}
+      {error && <div style={{ background: "#FBEEE8", border: "1px solid rgba(178,59,46,0.22)", borderRadius: 14, padding: "12px 16px", marginBottom: 14, color: T.error, fontSize: 13 }}>{error}</div>}
 
-      <Btn label={loading ? "⏳ Generating..." : ingredients.length ? `✨ Generate 3 Recipes (${ingredients.length} ingredient${ingredients.length > 1 ? "s" : ""})` : "Add ingredients to generate"} primary
+      <Btn label={loading ? "Generating…" : ingredients.length ? `Generate 3 recipes (${ingredients.length} ingredient${ingredients.length > 1 ? "s" : ""})` : "Add ingredients to generate"} primary
         onPress={generate} style={{ width: "100%", opacity: !ingredients.length ? 0.6 : 1 }} />
       {!pro && (
-        <div style={{ textAlign: "center", fontSize: 12, color: T.g4, marginTop: 10 }}>
-          {Math.max(0, FREE_LIMITS.gen - usage.gen)} of {FREE_LIMITS.gen} free generations · {Math.max(0, FREE_LIMITS.scan - usage.scan)} of {FREE_LIMITS.scan} free scan left today{" "}
-          <span onClick={openPaywall} style={{ color: T.mintDark, fontWeight: 700, cursor: "pointer" }}>· Go Pro ♾️</span>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: T.g4, marginTop: 12 }}>
+          <span>{Math.max(0, FREE_LIMITS.gen - usage.gen)} of {FREE_LIMITS.gen} free generations left today</span>
+          <span style={{ width: 3, height: 3, borderRadius: 99, background: T.g3 }} />
+          <span onClick={openPaywall} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: T.mintDark, fontWeight: 600, cursor: "pointer" }}><Icon name="infinity" size={14} color={T.mintDark} />Go unlimited</span>
         </div>
       )}
     </div>
@@ -930,8 +1010,8 @@ function guessCategory(name) {
 function GroceryRow({ item, onToggle }) {
   return (
     <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.g1}`, cursor: "pointer" }}>
-      <div style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.done ? T.mintDark : T.g3}`, background: item.done ? T.mintDark : T.white, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>
-        {item.done && <span style={{ color: T.white, fontSize: 13, fontWeight: 700 }}>✓</span>}
+      <div style={{ width: 22, height: 22, borderRadius: 8, border: `1.5px solid ${item.done ? T.mintDark : T.g3}`, background: item.done ? T.mintDark : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>
+        {item.done && <Icon name="check" size={12} color={T.white} sw={2.6} />}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: item.done ? T.g4 : T.black, textDecoration: item.done ? "line-through" : "none" }}>{item.name}</div>
@@ -961,15 +1041,16 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
   };
   const active = items.filter(i => !i.done);
   const inCart = items.filter(i => i.done);
-  const CAT_EMOJI = { "From Recipes": "🌿", Proteins: "🥩", Vegetables: "🥦", Grains: "🌾", Fruits: "🍎", Dairy: "🥛", Other: "🛒" };
-  const cats = Object.keys(CAT_EMOJI).filter(c => active.some(i => i.cat === c));
+  const CAT_ICON = { "From Recipes": "leaf", Proteins: "drumstick", Vegetables: "salad", Grains: "wheat", Fruits: "apple", Dairy: "milk", Other: "basket" };
+  const CAT_COLOR = { "From Recipes": "#2F5D45", Proteins: "#A4735E", Vegetables: "#3F7A5A", Grains: "#A8853F", Fruits: "#A4735E", Dairy: "#6E8FA0", Other: T.g5 };
+  const cats = Object.keys(CAT_ICON).filter(c => active.some(i => i.cat === c));
 
   return (
     <div style={{ padding: "16px" }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color: T.black, marginBottom: 6, letterSpacing: -0.3 }}>Grocery List</div>
-      <div style={{ ...card, background: T.mintLight, border: `1.5px solid ${T.mint}`, padding: "12px 16px", marginBottom: 14 }}>
-        <div style={{ fontSize: 13, color: T.g6, lineHeight: 1.55 }}>
-          <strong style={{ color: T.mintDark }}>What is this?</strong> Your shopping list for this week's meals. Tap items to check them off as you shop — and when you hit Save on an AI recipe, its ingredients land here automatically.
+      <div style={{ fontSize: 27, fontWeight: 600, color: T.black, marginBottom: 8, letterSpacing: -0.7 }}>Basket</div>
+      <div style={{ ...card, background: "#F1EDE3", border: "none", padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: "#4A4640", lineHeight: 1.55 }}>
+          <strong style={{ color: "#8A6D33" }}>What is this?</strong> Your shopping list for this week's meals. Tap items to check them off as you shop — and when you Save an AI recipe, its ingredients land here automatically.
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.g4, marginBottom: 6 }}>
@@ -987,22 +1068,22 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
       </div>
       {cats.map(cat => (
         <div key={cat} style={{ ...card, marginBottom: 10, padding: "12px 18px", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0 2px" }}>
-            <span style={{ fontSize: 16 }}>{CAT_EMOJI[cat]}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>{cat}</span>
+          <div style={{ display: "flex", gap: 9, alignItems: "center", padding: "6px 0 4px" }}>
+            <Icon name={CAT_ICON[cat]} size={15} color={CAT_COLOR[cat]} sw={1.6} />
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: "#8B8579", textTransform: "uppercase", letterSpacing: 0.8 }}>{cat}</span>
           </div>
           {active.filter(i => i.cat === cat).map(i => <GroceryRow key={i.id} item={i} onToggle={() => toggle(i.id)} />)}
         </div>
       ))}
       {active.length === 0 && (
-        <div style={{ ...card, textAlign: "center", padding: "28px 20px", marginBottom: 10 }}>
-          <div style={{ fontSize: 26, marginBottom: 8 }}>🎉</div>
-          <div style={{ fontSize: 14, color: T.g5 }}>All done — everything is in your cart!</div>
+        <div style={{ ...card, textAlign: "center", padding: "30px 20px", marginBottom: 10 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 15, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="check" size={22} color={T.mintDark} sw={2.2} /></div>
+          <div style={{ fontSize: 14, color: T.g5 }}>All done — everything is in your basket.</div>
         </div>
       )}
       {inCart.length > 0 && (
-        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: T.mintLight, animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 1, padding: "4px 0 2px" }}>✓ In cart ({inCart.length})</div>
+        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: "#F1EFE9", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 0.8, padding: "4px 0 2px" }}><Icon name="check" size={14} color={T.g5} sw={2.2} />In the basket ({inCart.length})</div>
           {inCart.map(i => <GroceryRow key={i.id} item={i} onToggle={() => toggle(i.id)} />)}
         </div>
       )}
@@ -1065,8 +1146,8 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
   if (sub) return (
     <div style={{ padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-        <button onClick={() => setSub(null)} style={{ width: 36, height: 36, borderRadius: 99, background: T.g1, border: "none", cursor: "pointer", fontSize: 18 }}>←</button>
-        <div style={{ fontSize: 20, fontWeight: 800, color: T.black, letterSpacing: -0.3 }}>{sub}</div>
+        <button onClick={() => setSub(null)} style={{ width: 36, height: 36, borderRadius: 99, background: T.white, boxShadow: shadow.sm, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="arrowLeft" size={17} color={T.g6} /></button>
+        <div style={{ fontSize: 20, fontWeight: 700, color: T.black, letterSpacing: -0.3 }}>{sub}</div>
       </div>
 
       {sub === "Notification Preferences" && (
@@ -1102,7 +1183,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
 
       {sub === "Connected Apps" && (
         <div style={{ ...card, padding: "6px 18px" }}>
-          {["🍎 Apple Health", "⌚ Garmin Connect", "🏃 Google Fit", "🥗 MyFitnessPal"].map((a, i, arr) => (
+          {["Apple Health", "Garmin Connect", "Google Fit", "MyFitnessPal"].map((a, i, arr) => (
             <div key={a} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: `1px solid ${T.g1}` }}>
               <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{a}</span>
               <Btn small label={connected[a] ? "Requested ✓" : "Connect"} onPress={() => setConnected(prev => ({ ...prev, [a]: true }))}
@@ -1141,7 +1222,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
               <div key={q} style={{ borderBottom: i < arr.length - 1 ? `1px solid ${T.g1}` : "none" }}>
                 <button onClick={() => setFaqOpen(faqOpen === q ? null : q)} style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", padding: "14px 0", fontSize: 14, fontWeight: 600, color: T.black, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                   <span>{q}</span>
-                  <span style={{ color: T.g4, fontSize: 11, transform: faqOpen === q ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}>▼</span>
+                  <span style={{ display: "flex", color: T.g4, transform: faqOpen === q ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}><Icon name="chevronDown" size={15} color={T.g4} /></span>
                 </button>
                 {faqOpen === q && <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.6, paddingBottom: 14, animation: "popIn .25s ease both" }}>{a}</div>}
               </div>
@@ -1155,14 +1236,14 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
       )}
       {sub === "Favorite Dishes" && (
         favorites.length === 0 ? (
-          <div style={{ ...card, textAlign: "center", padding: "32px 20px" }}>
-            <div style={{ fontSize: 28, marginBottom: 8, color: T.g3 }}>♡</div>
-            <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.6 }}>No favorites yet — tap the ♡ on any meal.</div>
+          <div style={{ ...card, textAlign: "center", padding: "34px 20px" }}>
+            <div style={{ width: 48, height: 48, borderRadius: 15, background: T.g1, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="heart" size={22} color={T.g3} /></div>
+            <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.6 }}>No favorites yet — tap the heart on any meal.</div>
           </div>
         ) : (
           favorites.map((f, i) => (
             <div key={f.name} style={{ ...card, padding: "14px 18px", marginBottom: 10, display: "flex", alignItems: "center", gap: 12, animation: "slideUp .35s cubic-bezier(.22,.68,0,1) both", animationDelay: `${i * 0.05}s` }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{f.emoji}</div>
+              <DishTile name={f.name} slot={f.type} size={44} radius={14} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: T.black, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -1180,8 +1261,8 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
 
       {sub === "Want to Try" && (
         tryList.length === 0 ? (
-          <div style={{ ...card, textAlign: "center", padding: "32px 20px" }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🔖</div>
+          <div style={{ ...card, textAlign: "center", padding: "34px 20px" }}>
+            <div style={{ width: 48, height: 48, borderRadius: 15, background: T.g1, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="bookmark" size={22} color={T.g3} /></div>
             <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.6 }}>Recipes you Save from the AI generator land here.</div>
           </div>
         ) : (
@@ -1195,18 +1276,18 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.black, lineHeight: 1.3 }}>{r.name}</div>
                     <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.black }}>{r.macros ? r.macros.calories : "—"} kcal</span>
-                      <Pill text={r.difficulty} color="#1A3A2A" bg={diffBg} size={10} />
+                      <Pill text={r.difficulty} color={T.white} bg={diffBg} size={10} />
                     </div>
                   </div>
                   <button onClick={() => { setTryList(p => p.filter(x => x.name !== r.name)); onRemoveTry?.(r.name); }} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
                 </div>
                 <button onClick={() => setTryOpen(isOpen ? null : r.name)} style={{
-                  width: "100%", marginTop: 10, background: isOpen ? T.mintLight : T.g1, border: `1.5px solid ${isOpen ? T.mint : T.g2}`,
-                  borderRadius: 12, padding: "9px 14px", cursor: "pointer", display: "flex",
-                  justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 700, color: T.mintDark,
+                  width: "100%", marginTop: 10, background: isOpen ? T.mintLight : T.g1, border: `1px solid ${isOpen ? T.mintDark : T.g2}`,
+                  borderRadius: 14, padding: "10px 14px", cursor: "pointer", display: "flex",
+                  justifyContent: "space-between", alignItems: "center", fontSize: 13, fontWeight: 600, color: T.mintDark,
                 }}>
-                  <span>{isOpen ? "Hide" : "Show"} Steps ({(r.steps || []).length})</span>
-                  <span style={{ fontSize: 10, transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>▼</span>
+                  <span>{isOpen ? "Hide" : "Show"} steps ({(r.steps || []).length})</span>
+                  <span style={{ display: "flex", transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}><Icon name="chevronDown" size={16} color={T.mintDark} /></span>
                 </button>
                 {isOpen && (
                   <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
@@ -1227,23 +1308,24 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
   );
 
   const statRows = [
-    { icon: "⚖️", label: "Current Weight", value: disp(lbs) },
-    { icon: "🎯", label: "Target Weight", value: disp(targetLbs) },
-    { icon: "🔥", label: "Daily Calories", value: `${targets.kcal} kcal` },
-    { icon: "💪", label: "Daily Protein", value: `${targets.protein}g` },
-    { icon: "📅", label: "Current Streak", value: `${streak} day${streak === 1 ? "" : "s"}` },
+    { icon: "trendUp", label: "Current Weight", value: disp(lbs) },
+    { icon: "target", label: "Target Weight", value: disp(targetLbs) },
+    { icon: "flame", label: "Daily Calories", value: `${targets.kcal} kcal` },
+    { icon: "drumstick", label: "Daily Protein", value: `${targets.protein}g` },
+    { icon: "calendar", label: "Current Streak", value: `${streak} day${streak === 1 ? "" : "s"}` },
   ];
   const settingRows = ["Notification Preferences","Dietary Restrictions","Connected Apps","Privacy Settings","Help & Support"];
   return (
     <div style={{ padding: "16px" }}>
       {/* Profile header: identity left, weight trend right */}
-      <div style={{ ...card, background: `linear-gradient(135deg, #0E2A1C 0%, #1A8C5F 100%)`, padding: "20px", marginBottom: 14 }}>
+      <div style={{ ...card, background: FOREST, padding: "20px", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ flexShrink: 0, textAlign: "center" }}>
-            <div style={{ width: 64, height: 64, borderRadius: 99, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 8px" }}>💪</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: T.white }}>{userName}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#0E2A1C", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
-            <div style={{ display: "inline-block", background: "rgba(168,245,211,0.2)", borderRadius: 99, padding: "3px 10px", marginTop: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>🎯 {userGoal}</span>
+            <div style={{ width: 60, height: 60, borderRadius: 99, background: "rgba(255,255,255,0.10)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, color: T.mint, margin: "0 auto 8px" }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.white }}>{userName}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#12251B", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(169,203,186,0.18)", borderRadius: 99, padding: "4px 11px", marginTop: 6 }}>
+              <Icon name="target" size={11} color={T.mint} sw={1.8} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>{userGoal}</span>
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1271,8 +1353,8 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         </div>
         {statRows.map((s, i) => (
           <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderBottom: `1px solid ${T.g1}` }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <span style={{ fontSize: 18 }}>{s.icon}</span>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <Icon name={s.icon} size={18} color={T.g5} sw={1.6} />
               <span style={{ fontSize: 15, color: T.g5, fontWeight: 500 }}>{s.label}</span>
             </div>
             <span style={{ fontSize: 15, fontWeight: 700, color: T.black }}>{s.value}</span>
@@ -1300,9 +1382,9 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         <div style={{ fontSize: 14, fontWeight: 700, color: T.black, marginBottom: 14 }}>Achievements</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "space-around" }}>
           {ACHIEVEMENTS.map(a => (
-            <div key={a.label} style={{ textAlign: "center", width: 76 }}>
-              <div style={{ width: 60, height: 60, margin: "0 auto 7px", borderRadius: 99, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, boxShadow: shadow.md, border: `3px solid ${T.white}`, outline: `2px solid ${T.mint}` }}>{a.emoji}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: T.g5, lineHeight: 1.3 }}>{a.label}</div>
+            <div key={a.label} style={{ textAlign: "center", width: 72 }}>
+              <div style={{ width: 48, height: 48, margin: "0 auto 8px", borderRadius: 15, background: a.tint, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name={a.icon} size={20} color={a.fg} sw={1.6} /></div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: T.g5, lineHeight: 1.3 }}>{a.label}</div>
             </div>
           ))}
         </div>
@@ -1311,12 +1393,15 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
       {/* My Recipe Box */}
       <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.black, padding: "12px 0 2px" }}>My Recipe Box</div>
-        {[["♥ Favorite Dishes", favorites.length, "Favorite Dishes"], ["🔖 Want to Try", tryList.length, "Want to Try"]].map(([label, count, target], i, arr) => (
+        {[["heart", "Favorite Dishes", favorites.length], ["bookmark", "Want to Try", tryList.length]].map(([ic, target, count], i, arr) => (
           <div key={target} onClick={() => setSub(target)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.g1}` : "none", cursor: "pointer" }}>
-            <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{label}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+              <Icon name={ic} size={18} color={T.g6} sw={1.6} />
+              <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{target}</span>
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ background: T.mintLight, color: T.mintDark, fontSize: 12, fontWeight: 700, borderRadius: 99, padding: "2px 10px" }}>{count}</span>
-              <span style={{ color: T.g3, fontSize: 18 }}>›</span>
+              <Icon name="chevronRight" size={16} color={T.g3} />
             </div>
           </div>
         ))}
@@ -1326,19 +1411,22 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
       <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
         {settingRows.map((s, i) => (
           <div key={s} onClick={() => setSub(s)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", borderBottom: i < settingRows.length - 1 ? `1px solid ${T.g1}` : "none", cursor: "pointer" }}>
-            <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{s}</span>
-            <span style={{ color: T.g3, fontSize: 18 }}>›</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+              <Icon name={{ "Notification Preferences": "bell", "Dietary Restrictions": "salad", "Connected Apps": "link", "Privacy Settings": "shield", "Help & Support": "bulb" }[s]} size={18} color={T.g6} sw={1.6} />
+              <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>{s}</span>
+            </div>
+            <Icon name="chevronRight" size={16} color={T.g3} />
           </div>
         ))}
       </div>
 
       {!pro && (
-        <div onClick={openPaywall} style={{ ...card, marginBottom: 14, padding: "14px 18px", background: `linear-gradient(135deg, #0E2A1C 0%, #1A8C5F 100%)`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div onClick={openPaywall} style={{ ...card, marginBottom: 14, padding: "16px 20px", background: FOREST, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: T.white }}>🌿 Upgrade to NutriCook Pro</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>Unlimited recipes, scans & remixes — $4.99/mo</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.white }}>NutriCook Pro</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 3, lineHeight: 1.4 }}>Unlimited recipes, scans & remixes · $4.99/mo</div>
           </div>
-          <span style={{ color: T.mint, fontSize: 18 }}>›</span>
+          <Icon name="chevronRight" size={18} color={T.mint} />
         </div>
       )}
       {onSignOut && (
@@ -1351,13 +1439,13 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
           )}
           <div onClick={onSignOut} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0", cursor: "pointer" }}>
             <span style={{ fontSize: 15, color: T.error, fontWeight: 600 }}>Sign Out</span>
-            <span style={{ color: T.g3, fontSize: 18 }}>›</span>
+            <Icon name="chevronRight" size={16} color={T.g3} />
           </div>
         </div>
       )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v2.6</div>
-        <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude AI</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v3.0</div>
+        <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude</div>
       </div>
     </div>
   );
@@ -1370,27 +1458,20 @@ function Paywall({ onClose, onUpgrade, busy }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 50, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", background: T.white, borderRadius: "24px 24px 0 0", padding: "24px 22px 28px", animation: "fadeUp 0.3s ease both" }}>
-        <div style={{ width: 40, height: 4, borderRadius: 99, background: T.g2, margin: "0 auto 18px" }} />
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 34, marginBottom: 6 }}>🌿</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: T.black, letterSpacing: -0.3 }}>NutriCook Pro</div>
-          <div style={{ fontSize: 14, color: T.g4, marginTop: 4 }}>You've used your free portions for today</div>
-        </div>
-        <div style={{ background: T.mintLight, border: `1.5px solid ${T.mint}`, borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
-          {[
-            ["♾️", "Unlimited AI recipe generation"],
-            ["📷", "Unlimited fridge scans to your pantry"],
-            ["🌶", "Unlimited recipe remixes"],
-            ["⚡", "Priority generation speed"],
-          ].map(([e, t]) => (
-            <div key={t} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0" }}>
-              <span style={{ fontSize: 16 }}>{e}</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: T.g6 }}>{t}</span>
+        <div style={{ width: 38, height: 4, borderRadius: 99, background: T.g2, margin: "0 auto 22px" }} />
+        <div style={{ width: 46, height: 46, borderRadius: 15, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}><Icon name="leaf" size={22} color={T.mintDark} sw={1.6} /></div>
+        <div style={{ fontSize: 25, fontWeight: 600, color: T.black, letterSpacing: -0.6, marginBottom: 8 }}>Cook without limits</div>
+        <div style={{ fontSize: 14, color: T.g4, lineHeight: 1.55, marginBottom: 22, maxWidth: 300 }}>You've used today's free generations. Pro keeps the coach available whenever you open the fridge.</div>
+        <div style={{ marginBottom: 22 }}>
+          {["Unlimited recipe generation", "Unlimited fridge scans", "Remix any recipe, any time", "Priority generation speed"].map((t, i, arr) => (
+            <div key={t} style={{ display: "flex", gap: 12, alignItems: "center", padding: "13px 0", borderTop: `1px solid ${T.g1}`, borderBottom: i === arr.length - 1 ? `1px solid ${T.g1}` : "none" }}>
+              <Icon name="check" size={16} color={T.mintDark} sw={2.2} />
+              <span style={{ fontSize: 14.5, fontWeight: 500, color: T.g6 }}>{t}</span>
             </div>
           ))}
         </div>
-        <Btn label={busy ? "⏳ Opening checkout…" : "Start Pro — $4.99/mo"} primary onPress={busy ? () => {} : onUpgrade} style={{ width: "100%", marginBottom: 10 }} />
-        <button onClick={onClose} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, color: T.g4, padding: "8px" }}>Maybe later</button>
+        <Btn label={busy ? "Opening checkout…" : "Start Pro — $4.99 / month"} primary onPress={busy ? () => {} : onUpgrade} style={{ width: "100%", marginBottom: 6 }} />
+        <button onClick={onClose} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, color: T.g4, padding: "10px" }}>Not now</button>
         <div style={{ fontSize: 11, color: T.g4, textAlign: "center", marginTop: 6 }}>Unlimited until your next billing date. Cancel anytime.</div>
       </div>
     </div>
@@ -1399,18 +1480,18 @@ function Paywall({ onClose, onUpgrade, busy }) {
 
 // ── Bottom Nav ───────────────────────────────────────────
 const NAV = [
-  { id: "home", icon: "⊙", label: "Home" },
-  { id: "plan", icon: "📅", label: "Plan" },
-  { id: "ai", icon: "🌿", label: "", fab: true },
-  { id: "grocery", icon: "🛒", label: "Grocery" },
-  { id: "profile", icon: "👤", label: "Profile" },
+  { id: "home", icon: "home", label: "Today" },
+  { id: "plan", icon: "calendar", label: "Plan" },
+  { id: "ai", icon: "sparkles", label: "", fab: true },
+  { id: "grocery", icon: "basket", label: "Basket" },
+  { id: "profile", icon: "user", label: "You" },
 ];
 
 function BottomNav({ tab, setTab }) {
   return (
     <div style={{
       position: "absolute", bottom: 0, left: 0, right: 0,
-      background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)",
+      background: "rgba(247,246,243,0.88)", backdropFilter: "blur(22px)",
       borderTop: `1px solid ${T.g2}`, paddingBottom: 8,
     }}>
       <div style={{ display: "flex", alignItems: "flex-end", height: 64 }}>
@@ -1420,22 +1501,20 @@ function BottomNav({ tab, setTab }) {
             border: "none", background: "transparent", cursor: "pointer", paddingBottom: 10,
           }}>
             <div style={{
-              width: 54, height: 54, borderRadius: 99, marginTop: -18,
-              background: tab === n.id ? T.mintDark : `linear-gradient(135deg, ${T.mintDark}, ${T.mintMid})`,
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
-              boxShadow: `0 4px 16px rgba(30,140,95,0.4)`,
+              width: 52, height: 52, borderRadius: 18, marginTop: -18, background: FOREST,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 10px 22px -6px rgba(47,93,69,0.5)`,
               animation: "pulseGlow 2.6s ease-in-out infinite",
               transition: "transform .25s cubic-bezier(.34,1.56,.64,1)", transform: tab === n.id ? "scale(1.08)" : "scale(1)",
-            }}>🌿</div>
+            }}><Icon name="sparkles" size={23} color="#F7F6F3" sw={1.6} /></div>
           </button>
         ) : (
           <button key={n.id} onClick={() => setTab(n.id)} style={{
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            border: "none", background: "transparent", cursor: "pointer", height: "100%", gap: 3, paddingTop: 6,
+            border: "none", background: "transparent", cursor: "pointer", height: "100%", gap: 5, paddingTop: 6,
           }}>
-            <span style={{ fontSize: 20, filter: tab === n.id ? "none" : "grayscale(1) opacity(0.5)", transition: "transform .25s cubic-bezier(.34,1.56,.64,1), filter .2s", transform: tab === n.id ? "translateY(-3px) scale(1.15)" : "translateY(0) scale(1)" }}>{n.icon}</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: tab === n.id ? T.mintDark : T.g4 }}>{n.label}</span>
-            {tab === n.id && <div style={{ width: 4, height: 4, borderRadius: 99, background: T.mintDark }} />}
+            <span style={{ transition: "transform .25s cubic-bezier(.34,1.56,.64,1)", transform: tab === n.id ? "translateY(-2px)" : "translateY(0)" }}><Icon name={n.icon} size={22} color={tab === n.id ? T.mintDark : T.g4} sw={tab === n.id ? 1.9 : 1.6} /></span>
+            <span style={{ fontSize: 10.5, fontWeight: tab === n.id ? 600 : 500, color: tab === n.id ? T.mintDark : T.g4 }}>{n.label}</span>
           </button>
         ))}
       </div>
@@ -1551,11 +1630,11 @@ function MainApp({ boot, mode, email, onSignOut }) {
         @keyframes slideUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
         @keyframes popIn { 0% { opacity:0; transform:scale(.92); } 70% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 4px 16px rgba(30,140,95,0.4); } 50% { box-shadow: 0 6px 26px rgba(30,140,95,0.65); } }
+        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 10px 22px -6px rgba(47,93,69,0.45); } 50% { box-shadow: 0 12px 28px -6px rgba(47,93,69,0.6); } }
         * { box-sizing: border-box; }
-        body { margin: 0; background: #1C1C1E; }
+        body { margin: 0; background: #E7E4DD; }
         button { font-family: inherit; }
-        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #C7C7CC; border-radius: 99px; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #D5D0C5; border-radius: 99px; }
       `}</style>
 
       <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", background: T.bg, position: "relative", overflow: "hidden", fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" }}>
@@ -1592,7 +1671,7 @@ function GlobalStyle() {
       @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
       @keyframes popIn { 0% { opacity:0; transform:scale(.92); } 70% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
       * { box-sizing: border-box; }
-      body { margin: 0; background: #1C1C1E; }
+      body { margin: 0; background: #E7E4DD; }
       button, input { font-family: inherit; }
     `}</style>
   );
@@ -1661,15 +1740,15 @@ function AuthScreen() {
     <Frame>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 22px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div style={{ textAlign: "center", marginBottom: 24, animation: "fadeUp .4s ease both" }}>
-          <div style={{ width: 64, height: 64, borderRadius: 20, background: `linear-gradient(135deg, ${T.mint}, ${T.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 12px" }}>🌿</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.black, letterSpacing: -0.5 }}>NutriCook AI</div>
+          <div style={{ width: 60, height: 60, borderRadius: 18, background: FOREST, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Icon name="leaf" size={28} color="#F7F6F3" sw={1.6} /></div>
+          <div style={{ fontSize: 27, fontWeight: 600, color: T.black, letterSpacing: -0.6 }}>NutriCook AI</div>
           <div style={{ fontSize: 14, color: T.g4, marginTop: 4 }}>{mode === "signup" ? "Create your account" : "Welcome back"}</div>
         </div>
         <div style={{ ...card, padding: "18px", animation: "fadeUp .4s ease .05s both" }}>
           {mode === "signup" && <AuthField label="Name" value={name} onChange={e => setName(e.target.value)} placeholder="Cesar" />}
           <AuthField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" onKeyDown={e => e.key === "Enter" && submit()} />
           <AuthField label="Password" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === "Enter" && submit()} />
-          {err && <div style={{ fontSize: 13, color: T.error, marginBottom: 10 }}>⚠️ {err}</div>}
+          {err && <div style={{ fontSize: 13, color: T.error, marginBottom: 10 }}>{err}</div>}
           {msg && <div style={{ fontSize: 13, color: T.mintDark, marginBottom: 10 }}>✓ {msg}</div>}
           <Btn label={busy ? "…" : mode === "signup" ? "Create account" : "Sign in"} primary onPress={submit} style={{ width: "100%", marginBottom: 10 }} />
           <button onClick={google} style={{ width: "100%", padding: "13px", borderRadius: 12, border: `1.5px solid ${T.g2}`, background: T.white, color: T.g6, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Continue with Google</button>
@@ -1766,13 +1845,13 @@ function OnboardingScreen({ email, defaultName, onDone }) {
             <AuthField label={`Target weight (${units === "metric" ? "kg" : "lbs"})`} inputMode="decimal" value={target} onChange={e => setTarget(e.target.value)} placeholder={units === "metric" ? "84" : "185"} />
           </div>
         )}
-        {err && <div style={{ fontSize: 13, color: T.error, marginTop: 12 }}>⚠️ {err}</div>}
+        {err && <div style={{ fontSize: 13, color: T.error, marginTop: 12 }}>{err}</div>}
       </div>
       <div style={{ padding: "16px 22px 28px", display: "flex", gap: 10 }}>
         {step > 0 && <Btn label="Back" onPress={() => setStep(s => s - 1)} style={{ flex: 1 }} />}
         {step < 2
           ? <Btn label="Continue" primary onPress={() => setStep(s => s + 1)} style={{ flex: 2 }} />
-          : <Btn label={busy ? "Saving…" : "Start cooking 🌿"} primary onPress={finish} style={{ flex: 2 }} />}
+          : <Btn label={busy ? "Saving…" : "Start cooking"} primary onPress={finish} style={{ flex: 2 }} />}
       </div>
     </Frame>
   );
@@ -1820,7 +1899,7 @@ export default function NutriCookApp() {
   if (phase === "loading") return (
     <Frame>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: 34, animation: "spin 1.4s linear infinite" }}>🌀</span>
+        <span style={{ display: "inline-flex", animation: "spin 1.4s linear infinite", color: T.mintDark }}><Icon name="sparkles" size={32} color={T.mintDark} /></span>
       </div>
     </Frame>
   );
