@@ -4,29 +4,46 @@ import { isProActive, computeStreak } from "../src/lib/quota.js";
 import * as db from "../src/lib/db.js";
 
 // ── Tokens (v3.0 — warm neutrals + a single forest-green accent) ─────────
+// Values are CSS custom properties so the whole tree recolors from one
+// `data-theme` flip on <html>. `onDark` (text on the fixed forest gradient)
+// stays light in both themes; `onAccent` (text on the flat accent fill)
+// flips because the accent itself lifts to sage on dark.
 const T = {
-  // Accent family (one green does all the work)
-  mint: "#A9CBBA",        // light sage — marks/text on dark forest surfaces
-  mintMid: "#3F7A5A",
-  mintDark: "#2F5D45",    // primary accent — CTAs, active states, links
-  mintLight: "#E9EFEA",   // accent tint background
-  deep: "#1E3D2E",        // deep forest — dark hero cards
-  // Surfaces + ink
-  bg: "#F7F6F3", white: "#FFFFFF", black: "#1B1A17",
-  // Warm neutral ramp
-  g1: "#F2F1EC", g2: "#E7E3DA", g3: "#D5D0C5", g4: "#9C978C", g5: "#6E6A61", g6: "#3D3A34",
-  // Status
-  success: "#2F5D45", warn: "#C8763C", error: "#B23B2E", blue: "#4A7080",
-  // Macros
-  protein: "#3F7A5A", carbs: "#C8763C", fat: "#B9A05B", water: "#6E8FA0",
+  mint: "var(--t-mint)", mintMid: "var(--t-mintMid)", mintDark: "var(--t-mintDark)",
+  mintLight: "var(--t-mintLight)", deep: "#1E3D2E",
+  onDark: "#F7F6F3", onAccent: "var(--t-onAccent)",
+  bg: "var(--t-bg)", white: "var(--t-white)", black: "var(--t-black)",
+  g1: "var(--t-g1)", g2: "var(--t-g2)", g3: "var(--t-g3)", g4: "var(--t-g4)", g5: "var(--t-g5)", g6: "var(--t-g6)",
+  success: "var(--t-success)", warn: "var(--t-warn)", error: "var(--t-error)", blue: "var(--t-blue)",
+  protein: "var(--t-protein)", carbs: "var(--t-carbs)", fat: "var(--t-fat)", water: "var(--t-water)",
 };
 const FOREST = `linear-gradient(160deg, #2F5D45 0%, #1E3D2E 100%)`;
+const THEME_CSS = `
+:root{
+  --t-mint:#A9CBBA;--t-mintMid:#3F7A5A;--t-mintDark:#2F5D45;--t-mintLight:#E9EFEA;--t-onAccent:#F7F6F3;
+  --t-bg:#F7F6F3;--t-white:#FFFFFF;--t-black:#1B1A17;
+  --t-g1:#F2F1EC;--t-g2:#E7E3DA;--t-g3:#D5D0C5;--t-g4:#9C978C;--t-g5:#6E6A61;--t-g6:#3D3A34;
+  --t-success:#2F5D45;--t-warn:#C8763C;--t-error:#B23B2E;--t-blue:#4A7080;
+  --t-protein:#3F7A5A;--t-carbs:#C8763C;--t-fat:#B9A05B;--t-water:#6E8FA0;
+  --t-cardBorder:transparent;--t-page:#E7E4DD;--t-scroll:#D5D0C5;
+}
+:root[data-theme="dark"]{
+  --t-mint:#A9CBBA;--t-mintMid:#5E9B7D;--t-mintDark:#86BFA3;--t-mintLight:rgba(134,191,163,0.15);--t-onAccent:#12251B;
+  --t-bg:#131311;--t-white:#1C1C19;--t-black:#F3F1EB;
+  --t-g1:#24241F;--t-g2:rgba(255,255,255,0.09);--t-g3:rgba(255,255,255,0.22);--t-g4:#6F6C63;--t-g5:#A29E93;--t-g6:#C7C2B7;
+  --t-success:#86BFA3;--t-warn:#DE9B60;--t-error:#E5988C;--t-blue:#8FB0C2;
+  --t-protein:#86BFA3;--t-carbs:#DE9B60;--t-fat:#CBB273;--t-water:#8FB0C2;
+  --t-cardBorder:rgba(255,255,255,0.07);--t-page:#0F0F0D;--t-scroll:rgba(255,255,255,0.18);
+}
+`;
+const getInitialTheme = () =>
+  (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
 const shadow = {
   sm: "0 1px 2px rgba(27,26,23,0.05)",
   md: "0 1px 2px rgba(27,26,23,0.04), 0 14px 30px -22px rgba(27,26,23,0.22)",
   lg: "0 1px 2px rgba(27,26,23,0.05), 0 24px 48px -24px rgba(27,26,23,0.30)",
 };
-const card = { background: T.white, borderRadius: 24, padding: "20px", boxShadow: shadow.md };
+const card = { background: T.white, borderRadius: 24, padding: "20px", boxShadow: shadow.md, border: "1px solid var(--t-cardBorder)" };
 
 // ── Lucide line icons (1.7 stroke, currentColor) ─────────
 const ICONS = {
@@ -64,10 +81,14 @@ const ICONS = {
   wheat: <><path d="M2 22 16 8" /><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /><path d="M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /><path d="M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z" /></>,
   apple: <><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z" /><path d="M10 2c1 .5 2 2 2 5" /></>,
   milk: <><path d="M8 2h8" /><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2" /><path d="M7 15a6.47 6.47 0 0 1 5 0 6.472 6.472 0 0 0 5 0" /></>,
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
 };
 function Icon({ name, size = 20, color = "currentColor", sw = 1.7, style }) {
+  // Color is applied via the CSS `color` property + `stroke="currentColor"` so
+  // CSS-variable tokens resolve reliably inside SVG (var() in a bare stroke
+  // attribute is not universally supported).
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0, ...style }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: "block", flexShrink: 0, color, ...style }}>
       {ICONS[name]}
     </svg>
   );
@@ -180,11 +201,11 @@ function Ring({ pct, color, size = 110, stroke = 10, children }) {
   return (
     <div style={{ position: "relative", width: size, height: size, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
       <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0 }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.g1} strokeWidth={stroke} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        <circle cx={size/2} cy={size/2} r={r} fill="none" strokeWidth={stroke} style={{ stroke: "rgba(255,255,255,0.16)" }} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" strokeWidth={stroke}
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
           transform={`rotate(-90 ${size/2} ${size/2})`}
-          style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(.22,.68,0,1.2)" }}
+          style={{ stroke: color, transition: "stroke-dashoffset 1.2s cubic-bezier(.22,.68,0,1.2)" }}
         />
       </svg>
       <div style={{ textAlign: "center" }}>{children}</div>
@@ -251,7 +272,7 @@ function Btn({ label, onPress, primary, small, style: st }) {
       onMouseDown={() => setPressed(true)} onMouseUp={() => setPressed(false)} onMouseLeave={() => setPressed(false)}
       style={{
         padding: small ? "8px 16px" : "14px 24px", borderRadius: 16, border: "none",
-        background: primary ? T.mintDark : T.g1, color: primary ? T.white : T.g6,
+        background: primary ? T.mintDark : T.g1, color: primary ? T.onAccent : T.g6,
         fontSize: small ? 13 : 15, fontWeight: 700, cursor: "pointer",
         transform: pressed ? "scale(0.97)" : "scale(1)", transition: "transform 0.1s, background 0.15s",
         letterSpacing: 0.2, ...st
@@ -361,9 +382,9 @@ function AICard({ recipe, index, onSave, onReplace }) {
       <div style={{ background: FOREST, padding: "18px 18px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
           <Pill text={`Option ${index + 1}`} color={T.mint} bg="rgba(169,203,186,0.18)" />
-          <Pill text={recipe.difficulty} color={T.white} bg={diffColor} />
+          <Pill text={recipe.difficulty} color={T.onAccent} bg={diffColor} />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: T.white, lineHeight: 1.25, marginBottom: 8, letterSpacing: -0.3 }}>{recipe.name}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: T.onDark, lineHeight: 1.25, marginBottom: 8, letterSpacing: -0.3 }}>{recipe.name}</div>
         <div style={{ display: "flex", gap: 14, fontSize: 12, color: "rgba(255,255,255,0.6)", alignItems: "center" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Icon name="clock" size={13} color="rgba(255,255,255,0.6)" />{recipe.prepTime}</span>
           <span>{recipe.servings} servings</span>
@@ -396,7 +417,7 @@ function AICard({ recipe, index, onSave, onReplace }) {
           <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
             {recipe.steps.map((s, i) => (
               <li key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.white, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i+1}</span>
+                <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.onAccent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i+1}</span>
                 <span style={{ fontSize: 13, color: T.g6, lineHeight: 1.6 }}>{s}</span>
               </li>
             ))}
@@ -551,7 +572,7 @@ function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, t
         <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's progress</div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Ring pct={consumed.kcal / targets.kcal} color={T.mint} size={120} stroke={10}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: T.white, lineHeight: 1 }}>{rem}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: T.onDark, lineHeight: 1 }}>{rem}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>kcal left</div>
           </Ring>
           <div style={{ flex: 1, paddingLeft: 24 }}>
@@ -616,7 +637,7 @@ function MacroRow({ label, value, target, color }) {
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
         <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>{label}</span>
-        <span style={{ color: T.white, fontWeight: 700 }}>{value}<span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>/{target}g</span></span>
+        <span style={{ color: T.onDark, fontWeight: 700 }}>{value}<span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>/{target}g</span></span>
       </div>
       <div style={{ height: 5, background: "rgba(255,255,255,0.15)", borderRadius: 99, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${w}%`, background: color, borderRadius: 99, transition: "width 1s cubic-bezier(.22,.68,0,1.2)" }} />
@@ -674,8 +695,8 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
             background: day === i ? T.mintDark : weekOffset === 0 && i === TODAY ? T.mintLight : T.white,
             boxShadow: day === i ? shadow.md : shadow.sm, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
           }}>
-            <div style={{ fontSize: 11, color: day === i ? T.mint : T.g4, fontWeight: 600, marginBottom: 4 }}>{d}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.white : T.black }}>{weekDates[i].getDate()}</div>
+            <div style={{ fontSize: 11, color: day === i ? T.onAccent : T.g4, fontWeight: 600, marginBottom: 4 }}>{d}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: day === i ? T.onAccent : T.black }}>{weekDates[i].getDate()}</div>
             {weekOffset === 0 && i === TODAY && day !== i && <div style={{ width: 5, height: 5, borderRadius: 99, background: T.mintDark, margin: "4px auto 0" }} />}
           </button>
         ))}
@@ -738,11 +759,11 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
         );
       })}
       {/* Daily fun fact */}
-      <div style={{ ...card, marginTop: 16, background: "#F1EDE3", border: "none", padding: "18px 20px", display: "flex", gap: 14, alignItems: "flex-start" }}>
-        <Icon name="bulb" size={18} color="#A8853F" sw={1.6} style={{ marginTop: 2 }} />
+      <div style={{ ...card, marginTop: 16, background: T.mintLight, border: "none", padding: "18px 20px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+        <Icon name="bulb" size={18} color={T.mintDark} sw={1.6} style={{ marginTop: 2 }} />
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#8A6D33", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Did you know?</div>
-          <div style={{ fontSize: 13, color: "#4A4640", lineHeight: 1.6 }}>{FUN_FACTS[day % FUN_FACTS.length]}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.mintDark, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Did you know?</div>
+          <div style={{ fontSize: 13, color: T.g6, lineHeight: 1.6 }}>{FUN_FACTS[day % FUN_FACTS.length]}</div>
         </div>
       </div>
     </div>
@@ -912,10 +933,10 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           display: "flex", flexWrap: "wrap", gap: 7, alignItems: "flex-start", cursor: "text", background: T.g1,
         }}>
           {ingredients.map(ing => (
-            <span key={ing} style={{ background: T.mintDark, color: T.white, borderRadius: 99, padding: "5px 12px 5px 14px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
+            <span key={ing} style={{ background: T.mintDark, color: T.onAccent, borderRadius: 99, padding: "5px 12px 5px 14px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
               {ing}
               <button onClick={e => { e.stopPropagation(); setIngredients(p => p.filter(i => i !== ing)); }}
-                style={{ background: "rgba(255,255,255,0.2)", border: "none", color: T.white, cursor: "pointer", padding: 0, fontSize: 14, width: 18, height: 18, borderRadius: 99, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                style={{ background: "rgba(255,255,255,0.2)", border: "none", color: T.onAccent, cursor: "pointer", padding: 0, fontSize: 14, width: 18, height: 18, borderRadius: 99, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
             </span>
           ))}
           <input ref={inputRef} value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKey}
@@ -959,7 +980,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           {GOAL_OPTS.map(g => (
             <button key={g} onClick={() => setGoal(g)} style={{
               padding: "8px 14px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-              background: goal === g ? T.mintDark : T.g1, color: goal === g ? T.white : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
+              background: goal === g ? T.mintDark : T.g1, color: goal === g ? T.onAccent : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
             }}>{g}</button>
           ))}
         </div>
@@ -1011,7 +1032,7 @@ function GroceryRow({ item, onToggle }) {
   return (
     <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${T.g1}`, cursor: "pointer" }}>
       <div style={{ width: 22, height: 22, borderRadius: 8, border: `1.5px solid ${item.done ? T.mintDark : T.g3}`, background: item.done ? T.mintDark : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>
-        {item.done && <Icon name="check" size={12} color={T.white} sw={2.6} />}
+        {item.done && <Icon name="check" size={12} color={T.onAccent} sw={2.6} />}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: item.done ? T.g4 : T.black, textDecoration: item.done ? "line-through" : "none" }}>{item.name}</div>
@@ -1048,9 +1069,9 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
   return (
     <div style={{ padding: "16px" }}>
       <div style={{ fontSize: 27, fontWeight: 600, color: T.black, marginBottom: 8, letterSpacing: -0.7 }}>Basket</div>
-      <div style={{ ...card, background: "#F1EDE3", border: "none", padding: "14px 16px", marginBottom: 14 }}>
-        <div style={{ fontSize: 13, color: "#4A4640", lineHeight: 1.55 }}>
-          <strong style={{ color: "#8A6D33" }}>What is this?</strong> Your shopping list for this week's meals. Tap items to check them off as you shop — and when you Save an AI recipe, its ingredients land here automatically.
+      <div style={{ ...card, background: T.mintLight, border: "none", padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: T.g6, lineHeight: 1.55 }}>
+          <strong style={{ color: T.mintDark }}>What is this?</strong> Your shopping list for this week's meals. Tap items to check them off as you shop — and when you Save an AI recipe, its ingredients land here automatically.
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.g4, marginBottom: 6 }}>
@@ -1070,7 +1091,7 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
         <div key={cat} style={{ ...card, marginBottom: 10, padding: "12px 18px", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
           <div style={{ display: "flex", gap: 9, alignItems: "center", padding: "6px 0 4px" }}>
             <Icon name={CAT_ICON[cat]} size={15} color={CAT_COLOR[cat]} sw={1.6} />
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: "#8B8579", textTransform: "uppercase", letterSpacing: 0.8 }}>{cat}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 0.8 }}>{cat}</span>
           </div>
           {active.filter(i => i.cat === cat).map(i => <GroceryRow key={i.id} item={i} onToggle={() => toggle(i.id)} />)}
         </div>
@@ -1082,7 +1103,7 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
         </div>
       )}
       {inCart.length > 0 && (
-        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: "#F1EFE9", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
+        <div style={{ ...card, marginTop: 6, padding: "12px 18px", background: T.g1, animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11.5, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 0.8, padding: "4px 0 2px" }}><Icon name="check" size={14} color={T.g5} sw={2.2} />In the basket ({inCart.length})</div>
           {inCart.map(i => <GroceryRow key={i.id} item={i} onToggle={() => toggle(i.id)} />)}
         </div>
@@ -1094,7 +1115,7 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
 function Toggle({ on, onFlip }) {
   return (
     <div onClick={onFlip} style={{ width: 46, height: 28, borderRadius: 99, background: on ? T.mintDark : T.g2, position: "relative", cursor: "pointer", transition: "background 0.2s", flexShrink: 0 }}>
-      <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 99, background: T.white, boxShadow: shadow.sm, transition: "left 0.2s" }} />
+      <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 99, background: T.onDark, boxShadow: shadow.sm, transition: "left 0.2s" }} />
     </div>
   );
 }
@@ -1111,17 +1132,17 @@ function WeightChart({ data }) {
   const line = pts.map(pt => pt.map(n => Math.round(n * 10) / 10).join(",")).join(" ");
   return (
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
-      <polyline points={line} fill="none" stroke={T.mint} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={line} fill="none" stroke="#A9CBBA" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {pts.map((pt, i) => (
         <circle key={i} cx={pt[0]} cy={pt[1]} r={i === pts.length - 1 ? 4 : 2.5}
-          fill={i === pts.length - 1 ? "#FFFFFF" : T.mint} stroke={T.mint} strokeWidth={i === pts.length - 1 ? 2 : 0} />
+          fill={i === pts.length - 1 ? "#FFFFFF" : "#A9CBBA"} stroke="#A9CBBA" strokeWidth={i === pts.length - 1 ? 2 : 0} />
       ))}
     </svg>
   );
 }
 
 function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, pro, openPaywall, favorites, setFavorites, tryList, setTryList,
-  userName = USER.name, userGoal = USER.goal, targetLbs = USER.targetLbs, targets = TARGETS, streak = USER.streak, email, onSignOut, onLogWeight, onRemoveFavorite, onRemoveTry }) {
+  userName = USER.name, userGoal = USER.goal, targetLbs = USER.targetLbs, targets = TARGETS, streak = USER.streak, email, onSignOut, onLogWeight, onRemoveFavorite, onRemoveTry, theme = "light", onToggleTheme }) {
   const [sub, setSub] = useState(null);
   const [logVal, setLogVal] = useState("");
   const [notif, setNotif] = useState({ "Meal Reminders": true, "Water Reminders": true, "Weekly Progress Report": false, "Streak Alerts": true, "AI Recipe Suggestions": true });
@@ -1276,7 +1297,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.black, lineHeight: 1.3 }}>{r.name}</div>
                     <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.black }}>{r.macros ? r.macros.calories : "—"} kcal</span>
-                      <Pill text={r.difficulty} color={T.white} bg={diffBg} size={10} />
+                      <Pill text={r.difficulty} color={T.onAccent} bg={diffBg} size={10} />
                     </div>
                   </div>
                   <button onClick={() => { setTryList(p => p.filter(x => x.name !== r.name)); onRemoveTry?.(r.name); }} style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: T.g1, color: T.g4, cursor: "pointer", fontSize: 13, flexShrink: 0, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>✕</button>
@@ -1293,7 +1314,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
                   <ol style={{ margin: "12px 0 0", padding: 0, animation: "popIn .25s ease both" }}>
                     {(r.steps || []).map((s, j) => (
                       <li key={j} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.white, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{j + 1}</span>
+                        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: T.mintDark, color: T.onAccent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{j + 1}</span>
                         <span style={{ fontSize: 13, color: T.g6, lineHeight: 1.6 }}>{s}</span>
                       </li>
                     ))}
@@ -1322,7 +1343,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ flexShrink: 0, textAlign: "center" }}>
             <div style={{ width: 60, height: 60, borderRadius: 99, background: "rgba(255,255,255,0.10)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, color: T.mint, margin: "0 auto 8px" }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.white }}>{userName}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#12251B", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.onDark }}>{userName}{pro && <span style={{ marginLeft: 6, background: T.mint, color: "#12251B", borderRadius: 99, padding: "1px 7px", fontSize: 9, fontWeight: 800, verticalAlign: "middle", letterSpacing: 0.5 }}>PRO</span>}</div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(169,203,186,0.18)", borderRadius: 99, padding: "4px 11px", marginTop: 6 }}>
               <Icon name="target" size={11} color={T.mint} sw={1.8} />
               <span style={{ fontSize: 11, fontWeight: 600, color: T.mint }}>{userGoal}</span>
@@ -1347,7 +1368,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
           <div style={{ fontSize: 14, fontWeight: 700, color: T.black }}>My Goals</div>
           <div style={{ display: "flex", background: T.g1, borderRadius: 99, padding: 3 }}>
             {["imperial", "metric"].map(u => (
-              <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.white : T.g4, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>{u === "imperial" ? "lbs" : "kg"}</button>
+              <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.onAccent : T.g4, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}>{u === "imperial" ? "lbs" : "kg"}</button>
             ))}
           </div>
         </div>
@@ -1407,6 +1428,19 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         ))}
       </div>
 
+      {/* Appearance */}
+      {onToggleTheme && (
+        <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+              <Icon name="moon" size={18} color={T.g6} sw={1.6} />
+              <span style={{ fontSize: 15, color: T.black, fontWeight: 500 }}>Dark mode</span>
+            </div>
+            <Toggle on={theme === "dark"} onFlip={onToggleTheme} />
+          </div>
+        </div>
+      )}
+
       {/* Settings */}
       <div style={{ ...card, marginBottom: 14, padding: "6px 18px" }}>
         {settingRows.map((s, i) => (
@@ -1423,7 +1457,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
       {!pro && (
         <div onClick={openPaywall} style={{ ...card, marginBottom: 14, padding: "16px 20px", background: FOREST, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.white }}>NutriCook Pro</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.onDark }}>NutriCook Pro</div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 3, lineHeight: 1.4 }}>Unlimited recipes, scans & remixes · $4.99/mo</div>
           </div>
           <Icon name="chevronRight" size={18} color={T.mint} />
@@ -1538,6 +1572,9 @@ function MainApp({ boot, mode, email, onSignOut }) {
   const streak = live ? computeStreak(boot?.mealLogs || []) : USER.streak;
 
   const [tab, setTab] = useState("home");
+  const [theme, setTheme] = useState(getInitialTheme);
+  useEffect(() => { if (typeof document !== "undefined") document.documentElement.dataset.theme = theme; }, [theme]);
+  const toggleTheme = () => setTheme(t => (t === "dark" ? "light" : "dark"));
   const scrollRef = useRef(null);
   const [prefs, setPrefsRaw] = useState(profile?.dietary_prefs || []);
   const [units, setUnitsRaw] = useState(profile?.units || "imperial");
@@ -1625,6 +1662,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
   return (
     <>
       <style>{`
+        ${THEME_CSS}
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
         @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
         @keyframes slideUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
@@ -1632,9 +1670,9 @@ function MainApp({ boot, mode, email, onSignOut }) {
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes pulseGlow { 0%, 100% { box-shadow: 0 10px 22px -6px rgba(47,93,69,0.45); } 50% { box-shadow: 0 12px 28px -6px rgba(47,93,69,0.6); } }
         * { box-sizing: border-box; }
-        body { margin: 0; background: #E7E4DD; }
+        body { margin: 0; background: var(--t-page); transition: background .25s ease; }
         button { font-family: inherit; }
-        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #D5D0C5; border-radius: 99px; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--t-scroll); border-radius: 99px; }
       `}</style>
 
       <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", background: T.bg, position: "relative", overflow: "hidden", fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" }}>
@@ -1642,7 +1680,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
         <div style={{ background: T.white, padding: "12px 20px 8px", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, color: T.black, borderBottom: `1px solid ${T.g1}` }}>
           <span>9:41</span>
           <span style={{ fontSize: 11, color: T.mintDark, fontWeight: 700, letterSpacing: 0.5 }}>NUTRICOOK AI</span>
-          {pro ? <span style={{ background: T.mintDark, color: T.white, borderRadius: 99, padding: "1px 8px", fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>PRO</span> : <span>● ● ▮</span>}
+          {pro ? <span style={{ background: T.mintDark, color: T.onAccent, borderRadius: 99, padding: "1px 8px", fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>PRO</span> : <span style={{ color: T.g4 }}>●●▮</span>}
         </div>
 
         {/* Scrollable content */}
@@ -1652,7 +1690,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
           {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
           {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}
-          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} userName={userName} userGoal={userGoal} targetLbs={targetLbs} targets={targets} streak={streak} email={email} onSignOut={onSignOut} onLogWeight={logWeightLbs} onRemoveFavorite={removeFavorite} onRemoveTry={removeTry} />}
+          {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} userName={userName} userGoal={userGoal} targetLbs={targetLbs} targets={targets} streak={streak} email={email} onSignOut={onSignOut} onLogWeight={logWeightLbs} onRemoveFavorite={removeFavorite} onRemoveTry={removeTry} theme={theme} onToggleTheme={toggleTheme} />}
           </div>
         </div>
 
@@ -1667,11 +1705,12 @@ function MainApp({ boot, mode, email, onSignOut }) {
 function GlobalStyle() {
   return (
     <style>{`
+      ${THEME_CSS}
       @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
       @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
       @keyframes popIn { 0% { opacity:0; transform:scale(.92); } 70% { opacity:1; transform:scale(1.015); } 100% { opacity:1; transform:scale(1); } }
       * { box-sizing: border-box; }
-      body { margin: 0; background: #E7E4DD; }
+      body { margin: 0; background: var(--t-page); }
       button, input { font-family: inherit; }
     `}</style>
   );
@@ -1826,7 +1865,7 @@ function OnboardingScreen({ email, defaultName, onDone }) {
             {GOAL_OPTS.map(g => (
               <button key={g} onClick={() => setGoal(g)} style={{
                 padding: "10px 16px", borderRadius: 12, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600,
-                background: goal === g ? T.mintDark : T.white, color: goal === g ? T.white : T.g5, boxShadow: shadow.sm,
+                background: goal === g ? T.mintDark : T.white, color: goal === g ? T.onAccent : T.g5, boxShadow: shadow.sm,
               }}>{g}</button>
             ))}
             <div style={{ width: "100%", fontSize: 12, color: T.g4, marginTop: 8 }}>Sets your daily calorie & macro targets (editable later in Profile).</div>
@@ -1837,7 +1876,7 @@ function OnboardingScreen({ email, defaultName, onDone }) {
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
               <div style={{ display: "flex", background: T.g1, borderRadius: 99, padding: 3 }}>
                 {["imperial", "metric"].map(u => (
-                  <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.white : T.g4 }}>{u === "imperial" ? "lbs" : "kg"}</button>
+                  <button key={u} onClick={() => setUnits(u)} style={{ border: "none", cursor: "pointer", borderRadius: 99, padding: "4px 12px", fontSize: 12, fontWeight: 700, background: units === u ? T.mintDark : "transparent", color: units === u ? T.onAccent : T.g4 }}>{u === "imperial" ? "lbs" : "kg"}</button>
                 ))}
               </div>
             </div>
@@ -1893,6 +1932,10 @@ export default function NutriCookApp() {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Theme the pre-app screens (loading / auth / onboarding) to match the OS
+  // before MainApp mounts and takes over the data-theme attribute.
+  useEffect(() => { if (typeof document !== "undefined" && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = getInitialTheme(); }, []);
 
   const signOut = async () => { await supabase.auth.signOut(); setBoot(null); setPhase("auth"); };
 
