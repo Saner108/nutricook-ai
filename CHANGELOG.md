@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.1.0 — 2026-07-31
+
+### Dark mode + Home hero rebuild
+- **Dark theme.** Full dark mode (warm charcoal surfaces, near-white ink,
+  sage accent) implemented with CSS custom properties, so the whole tree
+  recolors from one `data-theme` flip. Follows the OS by default; a Dark mode
+  toggle lives in Profile. SVG colors route through `currentColor` so tokens
+  resolve in icons and rings.
+- **Home = one hero number.** Rebuilt Home to the "premium" layout: a single
+  *Energy left today* number with a forest progress bar and three macro
+  columns, a deep-forest *Up next* card for the next meal, a tap-to-log meal
+  list with check circles, and a compact water + weight-trend row. All live
+  data (eaten totals, water, weight) is preserved and now interactive in demo
+  mode too. Footer → v3.1.
+
+
 ## v3.0.0 — 2026-07-31
 
 ### Visual redesign — "Premium pass"

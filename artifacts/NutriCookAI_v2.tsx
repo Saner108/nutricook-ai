@@ -82,6 +82,7 @@ const ICONS = {
   apple: <><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z" /><path d="M10 2c1 .5 2 2 2 5" /></>,
   milk: <><path d="M8 2h8" /><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2" /><path d="M7 15a6.47 6.47 0 0 1 5 0 6.472 6.472 0 0 0 5 0" /></>,
   moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
+  refresh: <><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
 };
 function Icon({ name, size = 20, color = "currentColor", sw = 1.7, style }) {
   // Color is applied via the CSS `color` property + `stroke="currentColor"` so
@@ -536,93 +537,143 @@ async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
 
 // ── Screens ──────────────────────────────────────────────
 
-function HomeScreen({ setTab, favorites, toggleFavorite, userName = USER.name, targets = TARGETS, live = false, mealLogs = [], initialWater, onWater, onMarkMeal }) {
-  // In live mode, "today's progress" sums the meals the user has marked eaten
-  // today (seeded from meal_logs, updated live as they tap). Demo mode keeps the
-  // static v2.5 figures.
+function MiniSpark({ data }) {
+  const vals = data.map(d => d.w);
+  const min = Math.min(...vals), max = Math.max(...vals), rg = max - min || 1;
+  const pts = data.map((d, i) => [2 + i * (86 / Math.max(data.length - 1, 1)), 16 - ((d.w - min) / rg) * 14]);
+  const line = pts.map(p => p.map(n => Math.round(n * 10) / 10).join(",")).join(" ");
+  const last = pts[pts.length - 1];
+  return (
+    <svg width="100%" height="18" viewBox="0 0 90 18" style={{ display: "block" }}>
+      <polyline points={line} fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: T.mintMid }} />
+      <circle cx={last[0]} cy={last[1]} r="2.6" style={{ fill: T.mintDark }} />
+    </svg>
+  );
+}
+
+function HomeScreen({ setTab, userName = USER.name, targets = TARGETS, live = false, mealLogs = [], initialWater, onWater, onMarkMeal, streak = USER.streak, weights = WEIGHT_SEED }) {
+  // "Eaten today" drives the hero number. In live mode it's seeded from
+  // meal_logs and written through on every tap; in demo it's seeded from the
+  // meals' static done-state so the screen is still interactive with zero setup.
   const todayISO = new Date().toISOString().slice(0, 10);
   const [eaten, setEaten] = useState(() => new Set(
-    (mealLogs || []).filter(m => String(m.eaten_on).slice(0, 10) === todayISO && m.done !== false).map(m => m.slot)
+    live
+      ? (mealLogs || []).filter(m => String(m.eaten_on).slice(0, 10) === todayISO && m.done !== false).map(m => m.slot)
+      : MEALS.filter(m => m.done).map(m => m.type)
   ));
   const markEaten = meal => {
     const on = !eaten.has(meal.type);
     setEaten(prev => { const n = new Set(prev); on ? n.add(meal.type) : n.delete(meal.type); return n; });
     onMarkMeal?.(meal, on);
   };
-  const consumed = live
-    ? MEALS.filter(m => eaten.has(m.type)).reduce((a, m) => ({ kcal: a.kcal + m.kcal, protein: a.protein + m.protein, carbs: a.carbs + m.carbs, fat: a.fat + m.fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 })
-    : CONSUMED;
+  const meals = MEALS.map(m => ({ ...m, done: eaten.has(m.type) }));
+  const consumed = meals.filter(m => m.done).reduce((a, m) => ({ kcal: a.kcal + m.kcal, protein: a.protein + m.protein, carbs: a.carbs + m.carbs, fat: a.fat + m.fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
   const [water, setWater] = useState(initialWater ?? CONSUMED.water);
   const changeWater = n => { setWater(n); onWater?.(n); };
-  const rem = targets.kcal - consumed.kcal;
+  const rem = Math.max(0, targets.kcal - consumed.kcal);
+  const doneCount = meals.filter(m => m.done).length;
+  const upNext = meals.find(m => !m.done) || meals[meals.length - 1];
+  const pace = consumed.kcal <= targets.kcal ? "right on pace" : "over target";
+  const lastW = weights[weights.length - 1]?.w ?? USER.weightLbs;
+  const dateLabel = NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const greeting = NOW.getHours() < 12 ? "Good morning" : NOW.getHours() < 18 ? "Good afternoon" : "Good evening";
 
   return (
     <div style={{ padding: "16px 16px 8px" }}>
-      {/* Greeting */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 12, color: T.g4, fontWeight: 500, letterSpacing: 0.6, textTransform: "uppercase" }}>{NOW.getHours() < 12 ? "Good morning" : NOW.getHours() < 18 ? "Good afternoon" : "Good evening"}</div>
-          <div style={{ fontSize: 27, fontWeight: 600, color: T.black, letterSpacing: -0.7, marginTop: 4 }}>{userName}</div>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 22 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: T.g4, fontWeight: 500, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 8 }}>{dateLabel}</div>
+          <div style={{ fontSize: 26, fontWeight: 600, color: T.black, letterSpacing: -0.7, lineHeight: 1.1 }}>{greeting}, {userName}</div>
         </div>
-        <div style={{ width: 40, height: 40, borderRadius: 99, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: T.mintDark }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(200,118,60,0.12)", borderRadius: 99, padding: "6px 11px 6px 9px" }}>
+            <Icon name="flame" size={14} color={T.warn} />
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: T.warn }}>{streak}</span>
+          </div>
+          <div style={{ width: 38, height: 38, borderRadius: 99, background: T.mintLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: T.mintDark }}>{String(userName).trim().charAt(0).toUpperCase() || "C"}</div>
+        </div>
       </div>
 
-      {/* Progress Card */}
-      <div style={{ ...card, background: FOREST, marginBottom: 14, padding: "22px 20px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Today's progress</div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Ring pct={consumed.kcal / targets.kcal} color={T.mint} size={120} stroke={10}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: T.onDark, lineHeight: 1 }}>{rem}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>kcal left</div>
-          </Ring>
-          <div style={{ flex: 1, paddingLeft: 24 }}>
-            <MacroRow label="Protein" value={consumed.protein} target={targets.protein} color={T.protein} />
-            <MacroRow label="Carbs" value={consumed.carbs} target={targets.carbs} color={T.carbs} />
-            <MacroRow label="Fat" value={consumed.fat} target={targets.fat} color={T.fat} />
-          </div>
+      {/* Energy left — one hero number */}
+      <div style={{ ...card, marginBottom: 14, padding: "24px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.g5 }}>Energy left today</span>
+          <span style={{ width: 28, height: 28, borderRadius: 99, background: T.g1, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="flame" size={15} color={T.g5} /></span>
         </div>
-        {/* Water */}
-        <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}><Icon name="droplet" size={14} color={T.water} />Water</span>
-            <span style={{ fontSize: 12, color: T.mint, fontWeight: 700 }}>{water}/{targets.water} glasses</span>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 6 }}>
+          <span style={{ fontSize: 60, fontWeight: 600, color: T.black, letterSpacing: -3, lineHeight: 0.9, fontVariantNumeric: "tabular-nums" }}>{rem.toLocaleString()}</span>
+          <span style={{ fontSize: 15, fontWeight: 500, color: T.g4 }}>kcal</span>
+        </div>
+        <div style={{ fontSize: 13.5, color: T.g4, marginBottom: 18 }}>{consumed.kcal.toLocaleString()} of {targets.kcal.toLocaleString()} eaten · {pace}</div>
+        <div style={{ height: 8, background: T.g1, borderRadius: 99, overflow: "hidden", marginBottom: 20 }}>
+          <div style={{ height: "100%", width: `${Math.min(100, consumed.kcal / targets.kcal * 100)}%`, background: FOREST, borderRadius: 99, transition: "width 1s cubic-bezier(.22,.68,0,1.2)" }} />
+        </div>
+        <div style={{ display: "flex", gap: 14, paddingTop: 18, borderTop: `1px solid ${T.g2}` }}>
+          {[["Protein", consumed.protein, targets.protein, T.protein], ["Carbs", consumed.carbs, targets.carbs, T.carbs], ["Fat", consumed.fat, targets.fat, T.fat]].map(([l, v, t, c]) => (
+            <div key={l} style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: T.g4, marginBottom: 7 }}>{l}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: T.black, marginBottom: 8, fontVariantNumeric: "tabular-nums" }}>{v}<span style={{ fontWeight: 400, color: T.g4, fontSize: 13 }}> / {t} g</span></div>
+              <div style={{ height: 4, background: T.g1, borderRadius: 99, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.min(100, v / t * 100)}%`, background: c, borderRadius: 99, transition: "width 1s cubic-bezier(.22,.68,0,1.2)" }} /></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Up next — next action as a card, not a banner */}
+      <div style={{ borderRadius: 24, background: T.deep, padding: "22px 24px 20px", marginBottom: 24, animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: "0.05s" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Up next · {upNext.type}{upNext.time ? `, ${upNext.time}` : ""}</div>
+            <div style={{ fontSize: 21, fontWeight: 600, color: T.onDark, letterSpacing: -0.4, marginBottom: 7 }}>{upNext.name}</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{upNext.kcal} kcal · {upNext.protein} g protein · {upNext.prep}</div>
           </div>
-          <div style={{ display: "flex", gap: 5 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(255,255,255,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 24, fontWeight: 500, color: T.mint, letterSpacing: -0.5 }}>{String(upNext.name).trim().charAt(0).toUpperCase()}</div>
+        </div>
+        <div style={{ display: "flex", gap: 9 }}>
+          <button onClick={() => markEaten(upNext)} style={{ flex: 1, height: 46, border: "none", borderRadius: 16, background: "#F7F6F3", color: "#1E3D2E", fontSize: 14.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, cursor: "pointer" }}><Icon name="utensils" size={16} color="#1E3D2E" sw={1.7} />Mark eaten</button>
+          <button onClick={() => setTab("ai")} title="New idea" style={{ width: 46, height: 46, border: "1px solid rgba(255,255,255,0.16)", borderRadius: 16, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Icon name="refresh" size={17} color="rgba(255,255,255,0.75)" /></button>
+        </div>
+      </div>
+
+      {/* Today — tap a row to log it */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 600, color: T.black, letterSpacing: -0.4, margin: 0 }}>Today</h2>
+        <span style={{ fontSize: 13, fontWeight: 500, color: T.mintDark }}>{doneCount} of {meals.length} logged</span>
+      </div>
+      <div style={{ ...card, padding: "6px 20px", marginBottom: 14 }}>
+        {meals.map((m, i) => (
+          <div key={m.id} onClick={() => markEaten(m)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 0", borderBottom: i < meals.length - 1 ? `1px solid ${T.g1}` : "none", cursor: "pointer" }}>
+            <DishTile name={m.name} slot={m.type} size={46} radius={15} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 600, color: T.black, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
+              <div style={{ fontSize: 12.5, color: T.g4 }}>{m.type} · {m.kcal} kcal · {m.protein} g protein</div>
+            </div>
+            {m.done
+              ? <div style={{ width: 24, height: 24, borderRadius: 99, background: T.mintDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="check" size={13} color={T.onAccent} sw={2.4} /></div>
+              : <div style={{ width: 24, height: 24, borderRadius: 99, border: `1.5px solid ${T.g3}`, flexShrink: 0 }} />}
+          </div>
+        ))}
+      </div>
+
+      {/* Water + weight */}
+      <div style={{ ...card, padding: "20px 6px", display: "flex" }}>
+        <div style={{ flex: 1, padding: "0 16px" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: T.g4, marginBottom: 9 }}>Water</div>
+          <div style={{ fontSize: 19, fontWeight: 600, color: T.black, marginBottom: 9 }}>{water}<span style={{ fontWeight: 400, fontSize: 13, color: T.g4 }}> / {targets.water}</span></div>
+          <div style={{ display: "flex", gap: 2.5 }}>
             {Array(targets.water).fill(0).map((_, i) => (
-              <div key={i} onClick={() => changeWater(i + 1 === water ? i : i + 1)} title="Tap to log water"
-                style={{ flex: 1, height: 8, borderRadius: 99, cursor: "pointer", background: i < water ? T.water : "rgba(255,255,255,0.15)", transition: "background 0.2s" }} />
+              <div key={i} onClick={() => changeWater(i + 1 === water ? i : i + 1)} title="Tap to log water" style={{ flex: 1, height: 5, borderRadius: 99, cursor: "pointer", background: i < water ? T.water : T.g2, transition: "background .2s" }} />
             ))}
           </div>
         </div>
-      </div>
-
-      {/* AI Banner */}
-      <div style={{ ...card, background: T.mintLight, border: `1px solid rgba(47,93,69,0.14)`, marginBottom: 14, display: "flex", alignItems: "flex-start", gap: 12, padding: "16px 18px", animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: "0.06s" }}>
-        <div style={{ width: 40, height: 40, borderRadius: 13, background: "rgba(47,93,69,0.10)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icon name="leaf" size={20} color={T.mintDark} sw={1.6} /></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.mintDark, marginBottom: 4 }}>AI meal planner</div>
-          <div style={{ fontSize: 13, color: T.g5, lineHeight: 1.5, marginBottom: 12 }}>Based on your goals and available ingredients, we've created today's meal plan.</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn label="Generate New Plan" primary small onPress={() => setTab("ai")} style={{ fontSize: 12 }} />
-            <Btn label="Customize" small onPress={() => setTab("ai")} style={{ fontSize: 12 }} />
-          </div>
+        <div style={{ width: 1, background: T.g2 }} />
+        <div style={{ flex: 1, padding: "0 16px" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: T.g4, marginBottom: 9 }}>Weight</div>
+          <div style={{ fontSize: 19, fontWeight: 600, color: T.black, marginBottom: 6 }}>{Math.round(lastW)}<span style={{ fontWeight: 400, fontSize: 13, color: T.g4 }}> lbs</span></div>
+          <MiniSpark data={weights} />
         </div>
       </div>
-
-      {/* Today's Meals */}
-      <div style={{ fontSize: 18, fontWeight: 700, color: T.black, marginBottom: 12 }}>Today's Meals</div>
-      {MEALS.map((m, i) => (
-        <div key={m.id} style={{ animation: "slideUp .4s cubic-bezier(.22,.68,0,1) both", animationDelay: `${(i + 2) * 0.06}s` }}>
-          <MealCard meal={live ? { ...m, done: eaten.has(m.type) } : m} isFav={favorites.some(f => f.name === m.name)} onFav={toggleFavorite} />
-          {live && (
-            <button onClick={() => markEaten(m)} style={{
-              width: "100%", marginTop: -6, marginBottom: 12, padding: "9px", borderRadius: 12, cursor: "pointer",
-              border: `1.5px solid ${eaten.has(m.type) ? T.mintDark : T.g2}`, background: eaten.has(m.type) ? T.mintLight : T.white,
-              color: eaten.has(m.type) ? T.mintDark : T.g5, fontSize: 13, fontWeight: 700,
-            }}>{eaten.has(m.type) ? "✓ Eaten today" : "Mark as eaten"}</button>
-          )}
-        </div>
-      ))}
     </div>
   );
 }
@@ -1478,7 +1529,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
         </div>
       )}
       <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v3.0</div>
+        <div style={{ fontSize: 12, color: T.g4 }}>NutriCook AI · v3.1</div>
         <div style={{ fontSize: 11, color: T.g3, marginTop: 2 }}>Powered by Claude</div>
       </div>
     </div>
@@ -1686,7 +1737,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
         {/* Scrollable content */}
         <div ref={scrollRef} style={{ height: "calc(100vh - 36px - 72px)", overflowY: "auto", overflowX: "hidden" }}>
           <div key={tab} style={{ animation: "slideUp 0.32s cubic-bezier(.22,.68,0,1) both" }}>
-          {tab === "home" && <HomeScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} />}
+          {tab === "home" && <HomeScreen setTab={setTab} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} streak={streak} weights={weights} />}
           {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
           {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}
