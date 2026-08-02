@@ -16,6 +16,12 @@ NutriCook AI is a full-stack nutrition coaching app that generates personalized 
 | **Smart grocery list** | Auto-grouped by category with checkboxes and live progress tracking |
 | **Profile** | Health goals, weight tracking, streak counter, macro split visualization, and achievement badges |
 
+## Demo
+
+[![NutriCook AI walkthrough](https://img.shields.io/badge/Watch%20Demo-Loom-00897B?style=for-the-badge&logo=loom)](YOUR_LOOM_URL_HERE)
+
+> Replace `YOUR_LOOM_URL_HERE` with your Loom share link after recording. See `LOOM_SCRIPT.md` for a 90-second walkthrough script.
+
 ## Screenshots
 
 > Live screenshots weren't captured for this README — this session's outbound
