@@ -1,6 +1,14 @@
 node_modules
 dist
+dist-ds
 .DS_Store
 *.local
 .env
 .env*.local
+
+# design-sync (claude.ai/design) — regenerated build/cache, never committed
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
