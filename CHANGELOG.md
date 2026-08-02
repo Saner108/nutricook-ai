@@ -1,0 +1,188 @@
+# Changelog
+
+## v3.2.0 — 2026-07-31
+
+### Sign up with Apple, Google, or email
+- **Three ways in.** The auth screen now offers **Continue with Apple** and
+  **Continue with Google** (provider-generic `signInWithOAuth`) alongside
+  email/password, split by a subtle "or" divider. Brand marks are inline SVG:
+  the Apple logo uses `currentColor` so it flips for light/dark, the Google
+  mark stays multicolor on both surfaces.
+- **Clearer signup outcomes.** Email signup now reads the `signUp` result and
+  shows the right message instead of a one-size-fits-all "account created":
+  a live session ("Setting up your kitchen…", app transitions), a pending
+  confirmation ("Check your inbox to confirm your email, then sign in"), or an
+  already-registered email ("switch to Sign in") — the last detected via
+  Supabase's empty-`identities` signal. The name is passed in signup metadata
+  and `emailRedirectTo` points back at the app origin.
+- Footer → v3.2.
+
+> Setup note (Cesar): Apple/Google buttons need their providers enabled in
+> Supabase → Authentication → Providers (Google is already configured; Apple
+> needs a Services ID + key). For frictionless email signup, toggle off
+> "Confirm email" in the same section.
+
+
+## v3.1.0 — 2026-07-31
+
+### Dark mode + Home hero rebuild
+- **Dark theme.** Full dark mode (warm charcoal surfaces, near-white ink,
+  sage accent) implemented with CSS custom properties, so the whole tree
+  recolors from one `data-theme` flip. Follows the OS by default; a Dark mode
+  toggle lives in Profile. SVG colors route through `currentColor` so tokens
+  resolve in icons and rings.
+- **Home = one hero number.** Rebuilt Home to the "premium" layout: a single
+  *Energy left today* number with a forest progress bar and three macro
+  columns, a deep-forest *Up next* card for the next meal, a tap-to-log meal
+  list with check circles, and a compact water + weight-trend row. All live
+  data (eaten totals, water, weight) is preserved and now interactive in demo
+  mode too. Footer → v3.1.
+- **First-run empty state.** A freshly-onboarded account with no logged
+  activity gets a day-one Home (mockup 1i): one question ("Let's build your
+  first day of meals") + two actions, a "set up in two minutes" checklist, and
+  a "start with water" card — instead of a wall of zeroes. Fresh live accounts
+  now start water at 0 rather than the demo seed.
+- **Dark Pro sheet.** The paywall (mockup 1h) inherits dark mode from the token
+  system — price-first, sage CTA, plain benefit lines.
+
+
+## v3.0.0 — 2026-07-31
+
+### Visual redesign — "Premium pass"
+A full reskin of the shipped app to a calmer, more premium system. No logic
+changed: Supabase auth/persistence, the streaming AI generator, server-side
+quota, Stripe, and the demo-mode fallback all behave exactly as in v2.6.
+
+- **New design system.** Warm neutral surfaces (off-white `#F7F6F3`, cream
+  `#F1EDE3`) with a single muted forest-green accent (`#2F5D45`) doing all the
+  work. Softer single-shadow elevation, 24px card radii, warm-gray text ramp.
+  Macro colors moved to forest / clay / gold / slate.
+- **Lucide line icons everywhere.** Emoji replaced by a consistent 1.7-stroke
+  Lucide icon set for all chrome — bottom nav, FAB, headers, settings rows,
+  water/streak/target markers, grocery categories, achievements, paywall.
+- **Typographic dish tiles.** Meal thumbnails are now monogram tiles tinted by
+  meal slot (breakfast cream, lunch sage, dinner slate, snack clay) instead of
+  food emoji — on Home, Plan, and the Recipe Box.
+- **Screen polish.** Forest hero cards, de-emoji'd banners and empty states,
+  refreshed paywall (check-list + forest CTA), monogram avatars, "Basket" and
+  "Today"/"You" nav labels. Footer bumped to v3.0.
+
+Light theme ships now; full dark theme is the next step.
+
+
+## v2.6.0 — 2026-07-21
+
+### Phase 4 — Backend, Auth & Persistence (Supabase)
+NutriCook now has real accounts and real data. Everything degrades to the v2.5
+demo (session-only mock state) when Supabase env vars are absent, so the app still
+runs with zero setup.
+
+- **Auth gate.** Email/password + Continue with Google (Supabase Auth). Signed-out
+  users see a styled AuthScreen inside the 430px frame; sign-out lives in Profile.
+- **Onboarding.** First-login 3-step flow (name → goal → current/target weight) that
+  writes the profile, derives calorie/macro targets from the goal, and seeds a
+  starter grocery list.
+- **Live data.** Profile (name, goal, targets, units, dietary prefs), weight logs +
+  chart, favorites, Want-to-Try, grocery items, water, and meal logs all load from
+  Supabase and write through on every change (RLS keeps each user to their own rows).
+- **Real history + streak.** Marking a meal eaten on Home logs it; the Plan tab's
+  past days read real `meal_logs`, and the streak is computed from consecutive logged
+  days (no more hardcoded 12).
+- **Server-side quota.** `api/generate.js` now requires a valid user token and enforces
+  the free tier atomically in Postgres (3 generations + 1 scan/day), returning 402 to
+  open the paywall. Pro subscribers are never gated.
+- **Stripe ↔ user.** Checkout sessions are attributed to the user; the webhook is the
+  single source of truth, upserting a `subscriptions` row that drives Pro status.
+- **`db/migration.sql`** — full schema, `handle_new_user` trigger, RLS policies, and the
+  `consume_quota` enforcement function. **`src/lib/quota.js`** — pure, unit-tested
+  quota/streak helpers (15/15 tests pass). README setup guide + `.env.example` added.
+
+### Setup (Cesar)
+Create a free Supabase project, run `db/migration.sql` in the SQL editor, and add
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (frontend) plus `SUPABASE_URL` /
+`SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (serverless) in Vercel. Stripe keys
+optional. See README → "Backend setup (Phase 4)".
+
+
+## v2.5.0 — 2026-07-18
+
+### Meal History (Plan)
+- Browse up to a month back: week pager (This Week → 3 Weeks Ago) with date ranges above the day strip.
+- Past days show a Daily Summary card (total kcal vs target + P/C/F) and the four meals eaten that day, fully expandable. Today and future days behave as before.
+
+### Recipe Box (Favorites + Want to Try)
+- Tapping ♡ on any meal saves it to Favorite Dishes; hearts sync app-wide.
+- Saving an AI recipe now also files it under Want to Try (and still sends ingredients to Grocery).
+- Profile → My Recipe Box: Favorite Dishes and Want to Try pages with counts, macro pills, expandable steps, remove buttons, and helpful empty states.
+
+### Motion polish (same palette)
+- New slideUp / popIn / shimmer / pulseGlow keyframes; every tab change glides in; Home cards stagger; springy chips, pills, and day buttons; bottom-nav icons lift on select; the FAB breathes; dropdowns, accordions, and FAQ answers animate in.
+
+
+## v2.4.0 — 2026-07-18
+
+### NutriCook Pro — Stripe subscription (test-mode ready)
+- `api/checkout.js`: creates a Stripe Checkout Session (subscription mode, $4.99/mo) using STRIPE_SECRET_KEY + STRIPE_PRICE_ID; returns `{simulated:true}` when keys are absent so the flow demos end-to-end without a Stripe account.
+- `api/stripe-webhook.js`: signature-verified webhook for checkout.session.completed / customer.subscription.deleted (logs events; DB persistence is the documented next phase).
+- Paywall bottom sheet (T-token styled): unlimited generation, unlimited fridge scans, unlimited remixes, priority speed. `?upgraded=1` return URL activates Pro.
+- Free tier metering: 3 generations + 1 fridge scan per day (session-scoped; per-user enforcement requires auth + datastore). Live meter under the Generate button; exhausting quota opens the paywall — including on the Scan button itself. PRO badge in the status bar and on Profile; Upgrade banner on Profile for free users.
+
+### AI Recipe Remix agent
+- Every generated recipe card has a Remix row: 🌶 Spicier, 💪 More protein, 🔥 Fewer calories, x2 Servings, and 🔄 Swap ingredient (with inline input). Claude rewrites the recipe in the same JSON schema and the card updates in place with adjusted macros/ingredients/steps. Dev mock supports remixes offline.
+
+### Fixed
+- Scan quota was checked after the photo picker opened; the gate now fires on button tap.
+- "1 ingredients" grammar on the Generate button.
+
+### Docs
+- README: environment variable table (Anthropic + optional Stripe keys) and Business Model section.
+
+
+## v2.3.0 — 2026-07-18
+
+### Plan
+- Rotating "Did you know?" nutrition fact card fills the space below Snack (changes with the selected day).
+
+### Grocery — reorganized
+- "What is this?" explainer header so the page purpose is obvious.
+- Saving an AI recipe now pushes its ingredients into the list under a "From Recipes" group (recipes now include shopping-list ingredients with quantities).
+- Add-your-own-item input with automatic category detection and duplicate protection.
+- Simpler layout: items to buy grouped flat by aisle, checked items sink to a "✓ In cart" section; celebration state when everything is bought.
+
+### Profile — rebuilt
+- Header: identity on the left, live weight-trend SVG chart on the right, with manual weight logging.
+- "My Goals" section header with lbs ⇄ kg unit toggle (converts weights everywhere).
+- Achievements redesigned as circular badges.
+- All five settings rows now open real pages: Notification Preferences (working toggles), Dietary Restrictions (synced with the AI Generator), Connected Apps (Apple Health / Garmin / Google Fit / MyFitnessPal interest stubs), Privacy Settings (written policy), Help & Support (FAQ accordion + contact).
+
+### Shared
+- App-level state: dietary prefs, units, weight log, and grocery list persist across tab switches.
+
+
+## v2.2.0 — 2026-07-17
+
+### Added
+- **Ingredient autocomplete search.** Typing in the ingredient bar now searches a 120-item pantry database and shows a tap-to-add dropdown (matched prefix bolded, already-added items excluded). Pressing Enter on a partial match adds the top suggestion.
+
+### Improved
+- **Generate button always responds.** Tapping it with an empty pantry now shows a friendly hint (search, quick-add, or Scan Fridge) instead of doing nothing.
+- **Uniform AI-tab layout.** Consistent card spacing top to bottom.
+
+
+## v2.1.0 — 2026-07-17
+
+### Fixed
+- **App now actually ships v2.** `src/main.jsx` previously rendered the old `src/App.jsx`; it now renders `artifacts/NutriCookAI_v2.tsx`. The deployed site was serving the old version with in-browser API-key entry.
+- **Removed direct Anthropic calls from the frontend.** v2's generate flow called `api.anthropic.com` with no auth headers (always failed). All AI traffic now goes through `/api/generate`.
+
+### Added
+- **`api/generate.js`** — Vercel serverless proxy. `ANTHROPIC_API_KEY` stays server-side; supports SSE streaming passthrough; clear error when the env var is missing.
+- **`vercel.json`** — SPA rewrites (all non-`/api` routes → `index.html`).
+- **Streaming recipe generation.** New tested helpers `extractRecipes`, `readSSEText`, `streamRecipes`: recipes render progressively as Claude writes them, with a live skeleton card showing the in-progress recipe name. All 6 unit tests pass.
+- **📷 Fridge Scan.** Camera/file picker → base64 → Claude Vision via `/api/generate` → detected ingredients merge into the chip list (deduped, lowercase). Handles oversized photos (>4MB), unreadable files, and empty results with friendly errors.
+- **Local dev API.** Vite dev middleware serves `/api/generate` under `npm run dev` — proxies to Anthropic when `ANTHROPIC_API_KEY` is set, otherwise returns realistic streamed mocks so the full UX works offline.
+- **Wired dead CTAs.** Home "Generate New Plan" / "Customize" and Plan "Generate with AI" now navigate to the AI tab.
+
+### Notes
+- `src/App.jsx` intentionally untouched (legacy standalone version).
+- Set `ANTHROPIC_API_KEY` in Vercel → Project Settings → Environment Variables for the live site.
