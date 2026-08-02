@@ -16,6 +16,20 @@ NutriCook AI is a full-stack nutrition coaching app that generates personalized 
 | **Smart grocery list** | Auto-grouped by category with checkboxes and live progress tracking |
 | **Profile** | Health goals, weight tracking, streak counter, macro split visualization, and achievement badges |
 
+## Screenshots
+
+> Live screenshots weren't captured for this README — this session's outbound
+> network access is policy-restricted, so browser automation couldn't reach
+> the [live demo](https://nutricook-ai-kappa.vercel.app/). Descriptions below
+> reflect the current build; see the live demo for the real thing.
+
+| Screen | Description |
+|---|---|
+| **Home dashboard** | Personalized greeting over a single "Energy left today" hero number, a forest-green progress bar, three macro columns (protein/carbs/fat), a deep-forest "Up next" meal card, a tap-to-log meal list, and a compact water + weight-trend row. |
+| **AI meal generator** | Ingredient chip input with autocomplete, goal presets (e.g. weight loss, muscle gain) and dietary toggles, then three streamed recipe cards that fill in name → nutrition → steps as the AI response arrives. |
+| **Weekly planner** | 7-day calendar with expandable per-day meal sections, each showing nutrition totals and prep-time details for that day's plan. |
+| **Profile with weight chart** | Health goals and targets, a weight-tracking sparkline, streak counter, macro split visualization, and achievement badges — all backed by live Supabase data outside demo mode. |
+
 ## Tech Stack
 
 | Layer | Technology |

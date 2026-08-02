@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.3.0 — 2026-08-02
+
+### CI, test coverage, and fellowship docs
+- **Vercel CI/CD pipeline.** Replaced the old GitHub Pages deploy workflow
+  with a GitHub Actions "Test" workflow that runs the test suite and a build
+  smoke-check on every push/PR to `main`. Actual deployment stays with
+  Vercel's own GitHub integration (already connected, auto-deploys on push
+  to `main`), so no `vercel` CLI step or `VERCEL_TOKEN` secret is needed in
+  Actions.
+- **20 new backend tests.** Added `test/backend.test.mjs` covering the quota
+  gate, `remaining()`, `isScanRequest`, streak edge cases, and source-level
+  security/contract checks. Suite is now 35/35 passing.
+- **AI Agent Architecture section** added to the README, documenting the
+  schema-planner → migration-executor / api-auth-builder → test-runner
+  delegation pipeline and the frozen contracts it enforces.
+- **CASE_STUDY.md** added: an architecture write-up for the Claude Corps
+  Fellowship documentation.
+
+> Setup note (Cesar): no new secrets to add — CI reuses the existing
+> `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` GitHub secrets for the build
+> smoke-check.
+
+
 ## v3.2.0 — 2026-07-31
 
 ### Sign up with Apple, Google, or email
