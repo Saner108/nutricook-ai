@@ -2045,7 +2045,19 @@ function AuthScreen() {
       if (error) throw error;
     } catch (e) {
       const nice = { google: "Google", apple: "Apple" }[provider] || provider;
-      setErr(e?.message || `${nice} sign-in isn't available yet — use email instead.`);
+      const msg = e?.message || "";
+      // Apple provider not yet configured in Supabase — give a helpful hint
+      const appleNotConfigured = provider === "apple" && (
+        msg.toLowerCase().includes("provider") ||
+        msg.toLowerCase().includes("not enabled") ||
+        msg.toLowerCase().includes("unsupported") ||
+        msg === ""
+      );
+      setErr(
+        appleNotConfigured
+          ? "Apple sign-in isn't enabled yet — email sign-in works great in the meantime."
+          : msg || `${nice} sign-in isn't available right now — try email instead.`
+      );
     }
   };
 
