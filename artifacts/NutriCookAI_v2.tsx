@@ -83,6 +83,7 @@ const ICONS = {
   milk: <><path d="M8 2h8" /><path d="M9 2v2.789a4 4 0 0 1-.672 2.219l-.656.984A4 4 0 0 0 7 10.212V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9.789a4 4 0 0 0-.672-2.219l-.656-.984A4 4 0 0 1 15 4.788V2" /><path d="M7 15a6.47 6.47 0 0 1 5 0 6.472 6.472 0 0 0 5 0" /></>,
   moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
   refresh: <><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
+  barChart: <><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></>,
 };
 function Icon({ name, size = 20, color = "currentColor", sw = 1.7, style }) {
   // Color is applied via the CSS `color` property + `stroke="currentColor"` so
@@ -871,6 +872,137 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
   );
 }
 
+// ── Insights (demo data helpers) ──────────────────────────
+// Deterministic 30-day mock meal_logs for demo mode — same shape as real
+// `meal_logs` rows (eaten_on, slot, name, kcal, protein, carbs, fat, done).
+// A handful of offsets are skipped so the streak heatmap isn't a solid block.
+function demoMealLogs(targets = TARGETS) {
+  const skip = new Set([2, 5, 6, 12, 13, 21, 26]);
+  const logs = [];
+  for (let off = 29; off >= 0; off--) {
+    if (skip.has(off)) continue;
+    const d = new Date(); d.setDate(d.getDate() - off);
+    const iso = d.toISOString().slice(0, 10);
+    const numMeals = off % 3 === 0 ? 4 : off % 2 === 0 ? 3 : 2;
+    const slots = ["Breakfast", "Lunch", "Dinner", "Snack"].slice(0, numMeals);
+    slots.forEach((slot, si) => {
+      const idx = Math.abs(off * 5 + si * 3) % MEAL_POOL.length;
+      const base = MEAL_POOL[idx];
+      const jitter = 1 + Math.sin(off * 12.9 + si * 4.1) * 0.1;
+      logs.push({
+        eaten_on: iso, slot, name: base.name, emoji: base.emoji,
+        kcal: Math.round(base.kcal * jitter), protein: Math.round(base.protein * jitter),
+        carbs: Math.round(base.carbs * jitter), fat: Math.round(base.fat * jitter), done: true,
+      });
+    });
+  }
+  return logs;
+}
+
+function InsightsScreen({ live = false, mealLogs = [], targets = TARGETS }) {
+  const logs = live ? mealLogs : demoMealLogs(targets);
+
+  // Last 7 calendar days, oldest first.
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    const iso = d.toISOString().slice(0, 10);
+    const dayLogs = logs.filter(l => String(l.eaten_on).slice(0, 10) === iso && l.done !== false);
+    const totals = dayLogs.reduce((a, l) => ({
+      kcal: a.kcal + (l.kcal || 0), protein: a.protein + (l.protein || 0),
+      carbs: a.carbs + (l.carbs || 0), fat: a.fat + (l.fat || 0),
+    }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    return { iso, label: d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0), totals, hasLogs: dayLogs.length > 0 };
+  });
+
+  const activeDays = week.filter(w => w.hasLogs);
+  const macroAvg = (["protein", "carbs", "fat"]).reduce((a, k) => {
+    a[k] = activeDays.length ? Math.round(activeDays.reduce((s, w) => s + w.totals[k], 0) / activeDays.length) : 0;
+    return a;
+  }, {});
+
+  // Top 3 most-logged meal names within the same 7-day window.
+  const nameCounts = new Map();
+  week.forEach(w => {
+    logs.filter(l => String(l.eaten_on).slice(0, 10) === w.iso && l.done !== false)
+      .forEach(l => nameCounts.set(l.name, (nameCounts.get(l.name) || 0) + 1));
+  });
+  const topMeals = [...nameCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  // Last 30 days, oldest first, for the streak heatmap.
+  const monthDays = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (29 - i));
+    const iso = d.toISOString().slice(0, 10);
+    const logged = logs.some(l => String(l.eaten_on).slice(0, 10) === iso && l.done !== false);
+    return { iso, logged };
+  });
+
+  const maxKcal = Math.max(targets.kcal, ...week.map(w => w.totals.kcal), 1);
+
+  return (
+    <div style={{ padding: "16px 16px 8px" }}>
+      <div style={{ fontSize: 12, color: T.g4, fontWeight: 500, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 8 }}>Your progress</div>
+      <div style={{ fontSize: 26, fontWeight: 600, color: T.black, letterSpacing: -0.7, marginBottom: 22 }}>Insights</div>
+
+      {/* 7-day calorie chart */}
+      <div style={{ ...card, marginBottom: 14, padding: "22px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: T.g5 }}>Calories, last 7 days</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: T.g4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: T.mintDark }} />Eaten</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: T.g4 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: T.g2 }} />Target</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 120 }}>
+          {week.map(w => (
+            <div key={w.iso} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 4 }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: "100%", width: "100%", justifyContent: "center" }}>
+                <div style={{ width: 8, borderRadius: 3, background: T.g2, height: `${Math.max(3, targets.kcal / maxKcal * 100)}%` }} title={`Target ${targets.kcal} kcal`} />
+                <div style={{ width: 8, borderRadius: 3, background: w.hasLogs ? T.mintDark : T.g1, height: `${Math.max(3, w.totals.kcal / maxKcal * 100)}%` }} title={`${w.totals.kcal} kcal eaten`} />
+              </div>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: T.g4 }}>{w.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Macro averages */}
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: T.g5, marginBottom: 10 }}>Weekly macro average</div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+        {[["Protein", macroAvg.protein, T.protein], ["Carbs", macroAvg.carbs, T.carbs], ["Fat", macroAvg.fat, T.fat]].map(([l, v, c]) => (
+          <div key={l} style={{ ...card, flex: 1, padding: "16px 14px" }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: c, marginBottom: 10 }} />
+            <div style={{ fontSize: 20, fontWeight: 600, color: T.black, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>{v}<span style={{ fontSize: 12, fontWeight: 500, color: T.g4 }}>g</span></div>
+            <div style={{ fontSize: 11.5, color: T.g4, fontWeight: 500 }}>{l}/day avg</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Top meals */}
+      <div style={{ ...card, marginBottom: 14, padding: "20px" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: T.g5, marginBottom: 14 }}>Most-logged this week</div>
+        {topMeals.length === 0 && <div style={{ fontSize: 13, color: T.g4 }}>No meals logged yet this week.</div>}
+        {topMeals.map(([name, count], i) => (
+          <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: i < topMeals.length - 1 ? 14 : 0 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 99, background: T.mintLight, color: T.mintDark, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
+            <span style={{ fontSize: 14, color: T.black, fontWeight: 500, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: T.g4, flexShrink: 0 }}>logged {count}x</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 30-day streak heatmap */}
+      <div style={{ ...card, padding: "20px" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: T.g5, marginBottom: 14 }}>30-day streak</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 6 }}>
+          {monthDays.map(d => (
+            <div key={d.iso} title={d.iso} style={{ aspectRatio: "1", borderRadius: 6, background: d.logged ? T.mintDark : T.g1 }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPaywall }) {
   const [step, setStep] = useState("input"); // input | results
   const [ingredients, setIngredients] = useState([]);
@@ -1619,6 +1751,7 @@ const NAV = [
   { id: "plan", icon: "calendar", label: "Plan" },
   { id: "ai", icon: "sparkles", label: "", fab: true },
   { id: "grocery", icon: "basket", label: "Basket" },
+  { id: "insights", icon: "barChart", label: "Insights" },
   { id: "profile", icon: "user", label: "You" },
 ];
 
@@ -1794,6 +1927,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
           {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
           {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}
+          {tab === "insights" && <InsightsScreen live={live} mealLogs={mealLogs} targets={targets} />}
           {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} userName={userName} userGoal={userGoal} targetLbs={targetLbs} targets={targets} streak={streak} email={email} onSignOut={onSignOut} onLogWeight={logWeightLbs} onRemoveFavorite={removeFavorite} onRemoveTry={removeTry} theme={theme} onToggleTheme={toggleTheme} />}
           </div>
         </div>
