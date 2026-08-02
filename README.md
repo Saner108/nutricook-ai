@@ -137,3 +137,42 @@ Built for the Claude Corps Fellowship (Cohort 1) application. The nutrition coac
 ## License
 
 MIT
+
+## AI Agent Architecture
+
+NutriCook uses a multi-agent orchestration pattern for safe, reviewable backend changes — an approach designed to demonstrate AI-first systems thinking for the Claude Corps Fellowship.
+
+```
+schema-planner ──► human approval ──► migration-executor ──► test-runner
+     (plan)            (Cesar)              (execute)           (verify)
+```
+
+Four specialized agents live in `.claude/agents/`:
+
+| Agent | Role | Key constraint |
+|---|---|---|
+| **schema-planner** | Plans schema, RLS, and migration changes — never writes files | Read-only tools only |
+| **migration-executor** | Implements the approved plan exactly — no independent schema decisions | Runs only after Cesar approves the plan |
+| **api-auth-builder** | All serverless auth, quota, and webhook logic | Runs before any API change |
+| **test-runner** | Runs `node test/run.mjs` + build after every change | Reports pass/fail only — never fixes |
+
+**Why this matters:** every database or API change goes through plan → review → execute → test, with a human checkpoint in the middle. Nothing deploys automatically. This makes the AI a force multiplier for careful engineering rather than a shortcut around it.
+
+**Frozen contracts the agents enforce:**
+- `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — argument order never changes
+- No `<form>` tags in React components
+- No `localStorage` / `sessionStorage`
+- Design tokens via the `T` object only (no raw hex)
+- Server-side quota enforcement only — no client-writable subscription status
+
+See `.claude/CLAUDE.md` for the full rules and `src/lib/quota.js` for the pure, unit-tested quota/streak logic that both the frontend and serverless proxy share.
+
+## Setup Checklist
+
+For Apple Sign-In (wired in v3.2.0, requires Supabase config):
+1. Supabase → Authentication → Providers → Apple → enable, add Services ID + key
+2. Google is already configured; toggle "Confirm email" off for frictionless signup
+
+For GitHub Actions CI (runs tests + a build smoke-check on every push/PR to `main`):
+1. Deployment itself is handled by Vercel's GitHub integration (auto-deploys on push to `main`), not by this workflow
+2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as GitHub secrets (used during the build step)
