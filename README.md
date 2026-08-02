@@ -2,108 +2,98 @@
 
 **Turn your ingredients into personalized recipes — powered by Claude AI.**
 
-NutriCook AI is a full-stack nutrition coaching application that generates personalized meal plans and recipes based on available ingredients, dietary preferences, and health goals. Built as part of the Claude Corps Fellowship portfolio by Cesar, Head Nutrition Coach at TAMUCC Recreational Sports Center.
+NutriCook AI is a full-stack nutrition coaching app that generates personalized meal plans and recipes based on available ingredients, dietary preferences, and health goals. Built as part of the Claude Corps Fellowship portfolio by Cesar, Head Nutrition Coach at TAMUCC Recreational Sports Center.
 
----
-
-## Live Demo
-
-> Open the project in Claude.ai or deploy via Vercel/Netlify for a shareable link.
-
----
+**[Live demo](https://nutricook-ai-kappa.vercel.app/)**
 
 ## Features
 
-**🏠 Home Dashboard**
-- Personalized greeting and daily nutrition summary
-- Animated calorie progress ring with macro breakdown (protein, carbs, fat)
-- Water intake tracker
-- AI meal plan banner with one-tap regeneration
-- Today's meal cards with AI confidence scores
+| Area | What it does |
+|---|---|
+| **Home dashboard** | Personalized greeting, animated calorie progress ring, water tracker, AI meal-plan banner, and daily nutrition summary |
+| **Weekly planner** | 7-day calendar with expandable meal sections and nutrition/prep details |
+| **AI meal generator** *(core feature)* | Ingredient chip input, 6 goal presets, 8 dietary toggles, and 3 generated recipes with full nutrition info and step-by-step instructions |
+| **Smart grocery list** | Auto-grouped by category with checkboxes and live progress tracking |
+| **Profile** | Health goals, weight tracking, streak counter, macro split visualization, and achievement badges |
 
-**📅 Weekly Meal Planner**
-- 7-day horizontal calendar navigation
-- Expandable meal sections (Breakfast, Lunch, Dinner, Snack)
-- Meal details with nutrition info, prep time, and difficulty
+## Demo
 
-**🌿 AI Meal Generator** *(core feature)*
-- Ingredient chip input — type and press Enter to add
-- Quick-add common ingredients
-- 6 nutrition goal presets (Fat Loss, Muscle Gain, Maintenance, etc.)
-- 8 dietary preference toggles (Vegan, Gluten-Free, Keto, etc.)
-- Generates 3 personalized recipes with full nutrition info
-- Animated macro bars per recipe
-- Step-by-step instructions
+[![NutriCook AI walkthrough](https://img.shields.io/badge/Watch%20Demo-Loom-00897B?style=for-the-badge&logo=loom)](YOUR_LOOM_URL_HERE)
 
-**🛒 Smart Grocery List**
-- Auto-grouped by category (Proteins, Vegetables, Grains, Fruits, Dairy)
-- Interactive checkboxes with live progress bar
-- Tap any category to expand/collapse
+> Replace `YOUR_LOOM_URL_HERE` with your Loom share link after recording. See `LOOM_SCRIPT.md` for a 90-second walkthrough script.
 
-**👤 Profile**
-- Health goals, weight tracking, streak counter
-- Macro split visualization
-- Achievement badges
-- App settings
+## Screenshots
 
----
+> Live screenshots weren't captured for this README — this session's outbound
+> network access is policy-restricted, so browser automation couldn't reach
+> the [live demo](https://nutricook-ai-kappa.vercel.app/). Descriptions below
+> reflect the current build; see the live demo for the real thing.
+
+| Screen | Description |
+|---|---|
+| **Home dashboard** | Personalized greeting over a single "Energy left today" hero number, a forest-green progress bar, three macro columns (protein/carbs/fat), a deep-forest "Up next" meal card, a tap-to-log meal list, and a compact water + weight-trend row. |
+| **AI meal generator** | Ingredient chip input with autocomplete, goal presets (e.g. weight loss, muscle gain) and dietary toggles, then three streamed recipe cards that fill in name → nutrition → steps as the AI response arrives. |
+| **Weekly planner** | 7-day calendar with expandable per-day meal sections, each showing nutrition totals and prep-time details for that day's plan. |
+| **Profile with weight chart** | Health goals and targets, a weight-tracking sparkline, streak counter, macro split visualization, and achievement badges — all backed by live Supabase data outside demo mode. |
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|---|---|
 | Frontend | React 18 + Vite |
 | Styling | Inline styles (iOS design system) |
-| AI | Anthropic Claude API (claude-sonnet-4-6) |
-| Deployment | Vercel / Netlify |
-
----
+| AI | Anthropic Claude API (`claude-sonnet-4-6`) |
+| Backend | Supabase (auth + persistence), Stripe (subscriptions) |
+| Deployment | Vercel |
 
 ## Getting Started
 
-### Prerequisites
-- Node.js 18+
-- An [Anthropic API key](https://console.anthropic.com/)
-
-### Installation
-
 ```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/nutricook-ai.git
+git clone https://github.com/Saner108/nutricook-ai.git
 cd nutricook-ai
-
-# Install dependencies
 npm install
-
-# Start the dev server
-npm run dev
+npm run dev        # http://localhost:5173
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+### API Key & Demo Mode
 
-### Adding Your API Key
+The Anthropic API key never touches the browser — it lives server-side in the `/api/generate` Vercel function (`ANTHROPIC_API_KEY`). Locally, a Vite middleware proxies to Anthropic when the key is set and otherwise serves realistic streamed mocks so the UI works offline.
 
-When the app loads, you'll see a yellow banner at the top:
+With no Supabase environment variables configured, the app runs in **demo mode** with session-only mock data and no login required.
 
-1. Click **"Add Key →"**
-2. Paste your Anthropic API key (starts with `sk-ant-`)
-3. Click **Save**
-4. Navigate to the **AI tab** (🌿 center button) to generate recipes
+## Backend Setup (Optional)
 
-> **Note:** The API key is stored in React state only — it is never saved to disk, localStorage, or any server. Each session requires re-entering the key. For a production deployment, move the API call to a backend server to keep your key secure.
+NutriCook uses Supabase for auth and persistence, and Stripe for the Pro subscription. Both are optional — leave them unconfigured and the app runs in demo mode.
 
+<<<<<<< HEAD
 > **`artifacts/NutriCookAI_v2.tsx`** (the in-progress v2 build) already uses the backend-proxy approach: it calls `/api/generate` instead of the Anthropic API directly, so no key is ever entered in the browser. See the Vercel deployment section below for how that key is configured server-side.
 
 ---
+=======
+1. Create a free Supabase project, then copy the Project URL, `anon` key, and `service_role` key.
+2. Run `db/migration.sql` in the Supabase SQL editor to create tables, the `handle_new_user` trigger, RLS policies, and the `consume_quota` function.
+3. (Optional) Enable Google sign-in under Authentication → Providers.
+4. Set environment variables in Vercel (Project Settings) and in `.env.local` locally. See `.env.example`.
+5. (Optional) Stripe: create a $4.99/mo recurring price and a webhook at `/api/stripe-webhook` for `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`. Test with `4242 4242 4242 4242`.
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | frontend | Browser client (RLS-scoped), public |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | serverless | Token verification |
+| `SUPABASE_SERVICE_ROLE_KEY` | serverless | Quota writes + webhook — never expose |
+| `ANTHROPIC_API_KEY` | serverless | Recipe/scan/remix proxy |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | serverless | Pro checkout + webhook (optional) |
+
+**Security:** the `service_role` key stays server-side only; RLS confines every user to their own rows; the Stripe webhook signature is verified; the Anthropic key never reaches the browser.
+>>>>>>> origin/main
 
 ## Deployment
 
-### Vercel (recommended)
 ```bash
-npm install -g vercel
-vercel
-```
+# Vercel (recommended)
+npm install -g vercel && vercel
 
+<<<<<<< HEAD
 `api/generate.js` is a Vercel serverless function that proxies chat/vision requests to Anthropic, keeping the API key server-side. Set it in your Vercel project settings (Settings → Environment Variables):
 
 ```
@@ -114,56 +104,56 @@ Redeploy after adding the variable. This is required for `artifacts/NutriCookAI_
 
 ### Netlify
 ```bash
+=======
+# Netlify
+>>>>>>> origin/main
 npm run build
-# Drag the `dist/` folder to netlify.com/drop
+# drag dist/ to netlify.com/drop
 ```
-
----
 
 ## Project Structure
 
 ```
 nutricook-ai/
+├── api/
+│   ├── generate.js            # Anthropic proxy (auth + quota gate, streaming)
+│   ├── checkout.js            # Stripe Checkout session
+│   ├── stripe-webhook.js      # Subscription lifecycle → Supabase
+│   └── _lib/supabaseAdmin.js  # service-role helpers (not routed)
+├── db/
+│   └── migration.sql          # schema + RLS + consume_quota RPC
 ├── src/
-│   ├── App.jsx          # Full application (all screens + components)
-│   └── main.jsx         # React entry point
-├── index.html
-├── vite.config.js
-├── package.json
-└── README.md
+│   ├── lib/                   # supabase client, db access, quota/streak helpers
+│   ├── App.jsx                # legacy standalone version (unused)
+│   └── main.jsx               # entry → artifacts/NutriCookAI_v2.tsx
+├── artifacts/
+│   └── NutriCookAI_v2.tsx     # the shipped app (all screens + components)
+├── test/                      # node --test unit tests
+└── package.json
 ```
-
----
 
 ## AI Integration
 
-The AI Generator uses a structured JSON prompt to ensure consistent, parseable output from Claude:
+Recipes stream from Claude through the server-side `/api/generate` proxy, so the browser never sees the API key. A structured JSON prompt keeps output parseable, and recipes render progressively as they stream:
 
-```javascript
-// Prompt requests 3 recipes as strict JSON
-const prompt = `Generate exactly 3 different recipes using: ${ingredients}.
-Goal: ${goal}. ${dietaryRequirements}
-Return ONLY valid JSON: {"recipes": [{ "name", "difficulty", "prepTime", "servings", "macros": {...}, "steps": [...] }]}`;
-
-// API call with direct browser access header
-const response = await fetch("https://api.anthropic.com/v1/messages", {
-  headers: {
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-    "anthropic-dangerous-direct-browser-access": "true",
-  },
-  body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages })
+```js
+const res = await fetch("/api/generate", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1500,
+    stream: true,
+    messages: [{ role: "user", content: prompt }],
+  }),
 });
+// SSE deltas are parsed incrementally so finished recipes appear one by one.
 ```
-
----
 
 ## Design System
 
-Inspired by Apple Human Interface Guidelines:
-
 | Token | Value | Use |
-|-------|-------|-----|
+|---|---|---|
 | `mint` | `#A8F5D3` | Primary accent |
 | `mintDark` | `#1A8C5F` | CTA buttons, active states |
 | `mintLight` | `#F0FBF6` | Card backgrounds, selections |
@@ -171,23 +161,57 @@ Inspired by Apple Human Interface Guidelines:
 | `g4` | `#8E8E93` | Secondary text |
 | Border radius | 14–20px | Cards and buttons |
 
----
+## Business Model
+
+Free tier: 3 recipe generations + 1 fridge scan per day. **Pro ($4.99/mo):** unlimited generation, scans, and remixes. Checkout uses Stripe subscription mode, and the webhook handles lifecycle events.
 
 ## Background
 
-This project was built as part of the **Claude Corps Fellowship (Cohort 1)** application. The nutrition coaching focus comes from real-world experience building client assessment programs at TAMUCC, where tracking ingredients, macros, and personalized meal planning are daily challenges for coaching clients.
-
-The Excel-based tools in this portfolio (Budget Tracker, Cooking Inventory) informed the data structure for the meal planning and grocery list features.
-
----
+Built for the Claude Corps Fellowship (Cohort 1) application. The nutrition coaching focus draws on real client assessment work at TAMUCC — tracking ingredients, macros, and personalized meal planning are daily challenges there. The Excel-based tools in [Excel-Business-Analytics-Portfolio](https://github.com/Saner108/Excel-Business-Analytics-Portfolio) informed this app's data structure.
 
 ## Author
 
-**Cesar** — Head Nutrition Coach, TAMUCC Recreational Sports Center  
-Claude Corps Fellowship Applicant, Cohort 1
-
----
+**Cesar** — Head Nutrition Coach, TAMUCC Recreational Sports Center · Claude Corps Fellowship Applicant, Cohort 1
 
 ## License
 
-MIT — free to use, modify, and share.
+MIT
+
+## AI Agent Architecture
+
+NutriCook uses a multi-agent orchestration pattern for safe, reviewable backend changes — an approach designed to demonstrate AI-first systems thinking for the Claude Corps Fellowship.
+
+```
+schema-planner ──► human approval ──► migration-executor ──► test-runner
+     (plan)            (Cesar)              (execute)           (verify)
+```
+
+Four specialized agents live in `.claude/agents/`:
+
+| Agent | Role | Key constraint |
+|---|---|---|
+| **schema-planner** | Plans schema, RLS, and migration changes — never writes files | Read-only tools only |
+| **migration-executor** | Implements the approved plan exactly — no independent schema decisions | Runs only after Cesar approves the plan |
+| **api-auth-builder** | All serverless auth, quota, and webhook logic | Runs before any API change |
+| **test-runner** | Runs `node test/run.mjs` + build after every change | Reports pass/fail only — never fixes |
+
+**Why this matters:** every database or API change goes through plan → review → execute → test, with a human checkpoint in the middle. Nothing deploys automatically. This makes the AI a force multiplier for careful engineering rather than a shortcut around it.
+
+**Frozen contracts the agents enforce:**
+- `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — argument order never changes
+- No `<form>` tags in React components
+- No `localStorage` / `sessionStorage`
+- Design tokens via the `T` object only (no raw hex)
+- Server-side quota enforcement only — no client-writable subscription status
+
+See `.claude/CLAUDE.md` for the full rules and `src/lib/quota.js` for the pure, unit-tested quota/streak logic that both the frontend and serverless proxy share.
+
+## Setup Checklist
+
+For Apple Sign-In (wired in v3.2.0, requires Supabase config):
+1. Supabase → Authentication → Providers → Apple → enable, add Services ID + key
+2. Google is already configured; toggle "Confirm email" off for frictionless signup
+
+For GitHub Actions CI (runs tests + a build smoke-check on every push/PR to `main`):
+1. Deployment itself is handled by Vercel's GitHub integration (auto-deploys on push to `main`), not by this workflow
+2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as GitHub secrets (used during the build step)
