@@ -16,6 +16,26 @@ NutriCook AI is a full-stack nutrition coaching app that generates personalized 
 | **Smart grocery list** | Auto-grouped by category with checkboxes and live progress tracking |
 | **Profile** | Health goals, weight tracking, streak counter, macro split visualization, and achievement badges |
 
+## Demo
+
+[![NutriCook AI walkthrough](https://img.shields.io/badge/Watch%20Demo-Loom-00897B?style=for-the-badge&logo=loom)](YOUR_LOOM_URL_HERE)
+
+> Replace `YOUR_LOOM_URL_HERE` with your Loom share link after recording. See `LOOM_SCRIPT.md` for a 90-second walkthrough script.
+
+## Screenshots
+
+> Live screenshots weren't captured for this README — this session's outbound
+> network access is policy-restricted, so browser automation couldn't reach
+> the [live demo](https://nutricook-ai-kappa.vercel.app/). Descriptions below
+> reflect the current build; see the live demo for the real thing.
+
+| Screen | Description |
+|---|---|
+| **Home dashboard** | Personalized greeting over a single "Energy left today" hero number, a forest-green progress bar, three macro columns (protein/carbs/fat), a deep-forest "Up next" meal card, a tap-to-log meal list, and a compact water + weight-trend row. |
+| **AI meal generator** | Ingredient chip input with autocomplete, goal presets (e.g. weight loss, muscle gain) and dietary toggles, then three streamed recipe cards that fill in name → nutrition → steps as the AI response arrives. |
+| **Weekly planner** | 7-day calendar with expandable per-day meal sections, each showing nutrition totals and prep-time details for that day's plan. |
+| **Profile with weight chart** | Health goals and targets, a weight-tracking sparkline, streak counter, macro split visualization, and achievement badges — all backed by live Supabase data outside demo mode. |
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -137,3 +157,42 @@ Built for the Claude Corps Fellowship (Cohort 1) application. The nutrition coac
 ## License
 
 MIT
+
+## AI Agent Architecture
+
+NutriCook uses a multi-agent orchestration pattern for safe, reviewable backend changes — an approach designed to demonstrate AI-first systems thinking for the Claude Corps Fellowship.
+
+```
+schema-planner ──► human approval ──► migration-executor ──► test-runner
+     (plan)            (Cesar)              (execute)           (verify)
+```
+
+Four specialized agents live in `.claude/agents/`:
+
+| Agent | Role | Key constraint |
+|---|---|---|
+| **schema-planner** | Plans schema, RLS, and migration changes — never writes files | Read-only tools only |
+| **migration-executor** | Implements the approved plan exactly — no independent schema decisions | Runs only after Cesar approves the plan |
+| **api-auth-builder** | All serverless auth, quota, and webhook logic | Runs before any API change |
+| **test-runner** | Runs `node test/run.mjs` + build after every change | Reports pass/fail only — never fixes |
+
+**Why this matters:** every database or API change goes through plan → review → execute → test, with a human checkpoint in the middle. Nothing deploys automatically. This makes the AI a force multiplier for careful engineering rather than a shortcut around it.
+
+**Frozen contracts the agents enforce:**
+- `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — argument order never changes
+- No `<form>` tags in React components
+- No `localStorage` / `sessionStorage`
+- Design tokens via the `T` object only (no raw hex)
+- Server-side quota enforcement only — no client-writable subscription status
+
+See `.claude/CLAUDE.md` for the full rules and `src/lib/quota.js` for the pure, unit-tested quota/streak logic that both the frontend and serverless proxy share.
+
+## Setup Checklist
+
+For Apple Sign-In (wired in v3.2.0, requires Supabase config):
+1. Supabase → Authentication → Providers → Apple → enable, add Services ID + key
+2. Google is already configured; toggle "Confirm email" off for frictionless signup
+
+For GitHub Actions CI (runs tests + a build smoke-check on every push/PR to `main`):
+1. Deployment itself is handled by Vercel's GitHub integration (auto-deploys on push to `main`), not by this workflow
+2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as GitHub secrets (used during the build step)
