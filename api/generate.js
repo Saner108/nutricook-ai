@@ -36,13 +36,24 @@ export default async function handler(req, res) {
   }
   const { model, max_tokens, messages, stream } = body;
 
-  // Auth + quota gate (only when Supabase is configured).
+  // Auth + rate limit + quota gate (only when Supabase is configured).
   if (supabaseConfigured) {
     const user = await getUser(bearer(req));
     if (!user) {
       res.status(401).json({ error: { message: "Sign in required" } });
       return;
     }
+    // Short-window abuse guard (requests/minute), checked before the daily
+    // quota so a rapid-fire loop gets stopped cheaply rather than burning
+    // through consume_quota's transaction on every hit.
+    const withinRateLimit = await rpc("check_rate_limit", { p_user: user.id, p_limit: 20 });
+    if (withinRateLimit === false) {
+      res.status(429).json({ error: { code: "rate_limited", message: "Too many requests — please slow down." } });
+      return;
+    }
+    // withinRateLimit === null means the check itself failed (e.g. transient
+    // DB error, or migration_ratelimit.sql not yet run); fail open here too,
+    // same policy as the quota check below.
     const kind = isScanRequest(messages) ? "scan" : "gen";
     const allowed = await rpc("consume_quota", { p_user: user.id, p_kind: kind });
     if (allowed === false) {
