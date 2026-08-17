@@ -69,11 +69,34 @@ Left in place but unused; consider deleting or clearly marking deprecated.
     not localStorage. **Trade-off, explicitly accepted:** users are signed
     out on a hard page refresh.
 
-11. **Admin panel** — **not built**. No admin role/feature exists in the app
-    at all currently (confirmed nothing leaked client-side). A real admin
-    panel (view users, comp subscriptions, adjust quotas) was scoped as a
-    separate future session — needs its own plan: new service-role-gated API
-    routes, an allowlist check, action logging. Not started.
+11. **Admin panel** — **API layer started; no UI.** There is still no admin
+    surface in the frontend, and nothing admin-related is exposed
+    client-side. What now exists is one read-only serverless route plus the
+    plumbing around it:
+    - `db/migration_admin_logs.sql` (new): `admin_logs` audit table. RLS on
+      with **zero policies** (no client may read it, not even the audited
+      user) plus `revoke all from anon, authenticated` as defense in depth.
+      Nullable actor columns + `outcome ('ok'|'denied'|'error')` so denied
+      and unauthenticated attempts are recordable. No FKs on the actor/target
+      columns on purpose — a cascade would let deleting a user erase the
+      record that an admin deleted them.
+    - `api/admin/_allowlist.js`: admins come from the `ADMIN_EMAILS` env var,
+      not source. Unset/empty = empty allowlist = everyone denied.
+    - `api/admin/_requireAdmin.js`: identity comes only from the verified
+      Supabase token, never from a param/header/body — that is what makes an
+      `admin_logs` row a fact rather than a claim.
+    - `api/admin/_logAction.js` + `api/admin/getUser.js`: the route is
+      **fail-closed** — the audit row is written before any data is returned,
+      and a failed write aborts the read with a 500. This is deliberately the
+      opposite of the fail-open quota policy in `api/generate.js`.
+    - `api/_lib/supabaseAdmin.js`: added `getUserByEmail()` (GoTrue Admin API;
+      `profiles` has no email column) and `insertRow()` (plain insert — the
+      existing `upsert()` sends `merge-duplicates`, which could overwrite an
+      audit record).
+    **Two things gate this working at all:** run the migration, and set
+    `ADMIN_EMAILS` in Vercel. Until both are done every `/api/admin/*` call
+    returns 401 (no allowlist) or 500 (no table).
+    Still unscoped: comp subscriptions, quota adjustment, any UI.
 
 12. **Password check on login** — `artifacts/NutriCookAI_v2.tsx`
     (`AuthScreen.submit`): client-side minimum-8-character check, but only
@@ -92,3 +115,18 @@ Left in place but unused; consider deleting or clearly marking deprecated.
   to do?) before scoping real work.
 - **Run `db/migration_ratelimit.sql` against Supabase** before relying on
   rate limiting in production.
+- **Run `db/migration_admin_logs.sql` against Supabase** before using the
+  admin routes. Unlike the rate-limit migration this one does not fail open —
+  `/api/admin/getUser` refuses to return data when it can't write an audit
+  row, so a missing `admin_logs` table means every call 500s. That is the
+  intended behavior, not a bug.
+- **Set `ADMIN_EMAILS` in Vercel** (comma-separated). Unset means no admins.
+- #11 admin UI: still needs your actual use case before more is built. The
+  one existing route is read-only; anything that *writes* (comping a
+  subscription) must stay service-role-only — `subscriptions` is
+  select-only for clients and that policy must not be relaxed for an admin
+  panel.
+- `getUserByEmail()` pages the full auth user list (capped at 50 pages ×
+  200 = 10k users) because GoTrue's server-side email filter is not
+  consistent across versions. Past ~10k users a real user would start
+  reporting as "not found" — revisit before that becomes plausible.
