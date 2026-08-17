@@ -25,6 +25,42 @@ export async function getUser(accessToken) {
   }
 }
 
+// Look up an auth user by email with the service role (GoTrue Admin API).
+// Returns { id, email } or null.
+//
+// The `?filter=` / `?email=` query params are deliberately NOT relied on: what
+// they do varies by GoTrue version — some treat it as an exact match, some as a
+// partial/substring match, and some ignore it entirely and return the full
+// list. A row coming back from the server therefore proves nothing, so the
+// first result is never trusted: every candidate is re-verified against the
+// requested address exactly (case-insensitively) before it is returned, and we
+// page through the list client-side so the lookup behaves the same on every
+// version. Paging the whole user list is fine at this project's size.
+export async function getUserByEmail(email) {
+  if (!supabaseConfigured || !email) return null;
+  const wanted = String(email).trim().toLowerCase();
+  if (!wanted) return null;
+  const perPage = 200;
+  try {
+    // Hard page cap so a misbehaving/ignored pagination param can't loop forever.
+    for (let page = 1; page <= 50; page++) {
+      const r = await fetch(`${URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, {
+        headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+      });
+      if (!r.ok) return null;
+      const body = await r.json();
+      const users = Array.isArray(body) ? body : Array.isArray(body?.users) ? body.users : [];
+      if (!users.length) return null;
+      const hit = users.find(u => typeof u?.email === "string" && u.email.trim().toLowerCase() === wanted);
+      if (hit && hit.id) return { id: hit.id, email: hit.email };
+      if (users.length < perPage) return null;   // last page, no match
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Pull the bearer token out of an incoming request's Authorization header.
 export function bearer(req) {
   const h = req.headers["authorization"] || req.headers["Authorization"] || "";
@@ -65,6 +101,32 @@ export async function upsert(table, rows) {
         Prefer: "resolution=merge-duplicates,return=minimal",
       },
       body: JSON.stringify(Array.isArray(rows) ? rows : [rows]),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Plain insert of one row with the service role. Returns true on success.
+//
+// Deliberately NOT upsert(): upsert() sends `Prefer: resolution=merge-duplicates`,
+// which on an append-only table (admin_logs) would quietly overwrite an existing
+// record instead of appending a new one — i.e. it could rewrite audit history.
+// This sends `return=minimal` only, so a duplicate is a failed insert (false)
+// rather than a silent replacement.
+export async function insertRow(table, row) {
+  if (!supabaseConfigured) return false;
+  try {
+    const r = await fetch(`${URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        apikey: SERVICE,
+        Authorization: `Bearer ${SERVICE}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(Array.isArray(row) ? row : [row]),
     });
     return r.ok;
   } catch {
