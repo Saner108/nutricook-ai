@@ -1,0 +1,25 @@
+{
+  "shape": "package",
+  "projectId": "9a3224d5-96d8-4a10-b1c7-b1f8f8a68acb",
+  "pkg": "nutricook-ai",
+  "globalName": "NutriCookDS",
+  "buildCmd": "npm run build:ds",
+  "srcDir": "src/design-system",
+  "readmeHeader": ".design-sync/conventions.md",
+  "componentSrcMap": {
+    "Button": "src/design-system/Button.jsx",
+    "Ring": "src/design-system/Ring.jsx",
+    "MacroBar": "src/design-system/MacroBar.jsx",
+    "MacroRow": "src/design-system/MacroRow.jsx",
+    "MealCard": "src/design-system/MealCard.jsx",
+    "AICard": "src/design-system/AICard.jsx"
+  },
+  "dtsPropsFor": {
+    "Button": "label: string; onPress?: () => void; primary?: boolean; small?: boolean; style?: React.CSSProperties;",
+    "Ring": "pct: number; color: string; size?: number; stroke?: number; children?: React.ReactNode;",
+    "MacroBar": "label: string; value: number; max: number; color: string;",
+    "MacroRow": "label: string; value: number; target: number; color: string;",
+    "MealCard": "meal: { id: number; type: string; name: string; kcal: number; protein: number; carbs: number; fat: number; time: string; prep: string; difficulty: 'Easy' | 'Medium' | 'Hard'; done: boolean; emoji: string; confidence: number; };",
+    "AICard": "recipe: { name: string; difficulty: 'Easy' | 'Medium' | 'Hard'; prepTime: string; servings: number; macros: { calories: number; protein: number; carbs: number; fat: number; }; steps: string[]; }; index: number;"
+  }
+}
