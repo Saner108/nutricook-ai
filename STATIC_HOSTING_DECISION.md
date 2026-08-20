@@ -1,4 +1,8 @@
-# Static hosting — decision needed, not a code fix
+# Static hosting — decision resolved
+
+**Decision (2026-08-20): Option A — keep the current architecture.** Vercel
+serverless + static frontend stays as-is; no migration planned. Kept below
+for reference on why the other options weren't chosen.
 
 Two things currently require a live backend, not just static files:
 
