@@ -1003,6 +1003,34 @@ function InsightsScreen({ live = false, mealLogs = [], targets = TARGETS }) {
   );
 }
 
+// Downscale + re-encode an image client-side before it becomes a base64 JSON
+// payload. Vision models don't need full-resolution photos, and a 4MB phone
+// photo can shrink to a few hundred KB at 1024px/JPEG-0.72 with no meaningful
+// loss in ingredient legibility. Cuts request size (and Anthropic image
+// tokens) well before the "JSON compression" question ever comes up.
+function downscaleImageToBase64(file, { maxDim = 1024, quality = 0.72 } = {}) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      const base64 = dataUrl.split(",")[1];
+      if (!base64) { reject(new Error("Couldn't process that photo.")); return; }
+      resolve(base64);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Couldn't read that photo — try another one.")); };
+    img.src = objectUrl;
+  });
+}
+
 function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPaywall }) {
   const [step, setStep] = useState("input"); // input | results
   const [ingredients, setIngredients] = useState([]);
@@ -1139,18 +1167,16 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
     useQuota("scan");
     if (file.size > 4 * 1024 * 1024) { setError("That photo is over 4MB — try a smaller or compressed one."); return; }
     setScanning(true); setError(null);
-    const fr = new FileReader();
-    fr.onerror = () => { setScanning(false); setError("Couldn't read that photo — try another one."); };
-    fr.onload = async () => {
+    (async () => {
       try {
-        const base64 = String(fr.result).split(",")[1];
+        const base64 = await downscaleImageToBase64(file, { maxDim: 1024, quality: 0.72 });
         const res = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "claude-sonnet-4-6", max_tokens: 300,
             messages: [{ role: "user", content: [
-              { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: base64 } },
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
               { type: "text", text: 'List only the food ingredients visible. Respond ONLY with JSON: {"ingredients":["item1","item2"]}' },
             ] }],
           }),
@@ -1167,8 +1193,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
       } finally {
         setScanning(false);
       }
-    };
-    fr.readAsDataURL(file);
+    })();
   };
 
   if (step === "results") return (
@@ -2084,11 +2109,23 @@ function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
+  // Client-side brute-force guard: escalating cooldown after repeated failed
+  // sign-in attempts. This is a UX-level speed bump, not the real defense —
+  // Supabase Auth already rate-limits sign-in attempts server-side — but it
+  // stops a naive scripted loop from getting instant retries against this UI.
+  const [failCount, setFailCount] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
 
   const submit = async () => {
     if (busy) return;
+    const now = Date.now();
+    if (lockedUntil > now) {
+      setErr(`Too many attempts — try again in ${Math.ceil((lockedUntil - now) / 1000)}s.`);
+      return;
+    }
     setErr(null); setMsg(null);
     if (!email.trim() || !pw) { setErr("Enter your email and password."); return; }
+    if (mode === "signup" && pw.length < 8) { setErr("Password must be at least 8 characters."); return; }
     setBusy(true);
     try {
       if (mode === "signup") {
@@ -2108,7 +2145,18 @@ function AuthScreen() {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
         if (error) throw error;
       }
+      setFailCount(0);
     } catch (e) {
+      if (mode === "signin") {
+        // Only sign-in failures count toward lockout — signup validation
+        // errors (e.g. weak password, duplicate email) aren't login attempts.
+        const nextFail = failCount + 1;
+        setFailCount(nextFail);
+        if (nextFail >= 5) {
+          const cooldownMs = Math.min(60000, 2000 * Math.pow(2, nextFail - 5)); // 2s, 4s, 8s... capped at 60s
+          setLockedUntil(Date.now() + cooldownMs);
+        }
+      }
       setErr(e?.message || "Something went wrong — try again.");
     } finally {
       setBusy(false);
@@ -2197,13 +2245,17 @@ function OnboardingScreen({ email, defaultName, onDone }) {
     const wLbs = toLbs(weight);
     const tLbs = toLbs(target);
     try {
-      await db.updateProfile({
-        name: name.trim() || "there", goal, units,
-        weight_lbs: wLbs, target_lbs: tLbs,
-        kcal_target: t.kcal, protein_target: t.protein, carbs_target: t.carbs, fat_target: t.fat,
-        dietary_prefs: [], onboarded: true,
-      });
-      await db.seedStarter(Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ name: i.name, qty: i.qty, cat, done: i.done }))), wLbs);
+      // profiles and (grocery_items + weight_logs) are independent writes,
+      // so they run in parallel instead of waiting on each other.
+      await Promise.all([
+        db.updateProfile({
+          name: name.trim() || "there", goal, units,
+          weight_lbs: wLbs, target_lbs: tLbs,
+          kcal_target: t.kcal, protein_target: t.protein, carbs_target: t.carbs, fat_target: t.fat,
+          dietary_prefs: [], onboarded: true,
+        }),
+        db.seedStarter(Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ name: i.name, qty: i.qty, cat, done: i.done }))), wLbs),
+      ]);
       onDone();
     } catch (e) {
       setErr(e?.message || "Couldn't save — try again.");

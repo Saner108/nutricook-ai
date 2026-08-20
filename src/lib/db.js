@@ -128,20 +128,24 @@ export async function markMeal(meal, done) {
 }
 
 // Seed a starter grocery list + starter weight on first login.
+// Grocery rows and the weight log are independent writes (different tables,
+// neither depends on the other's result) so they run in parallel.
 export async function seedStarter(starterGrocery, startWeightLbs) {
   const { data: u } = await supabase.auth.getUser();
   const uid = u.user.id;
-  if (starterGrocery?.length) {
-    await supabase.from("grocery_items").insert(
-      starterGrocery.map(g => ({ user_id: uid, name: g.name, qty: g.qty || "", category: g.cat || "Other", done: !!g.done, source: "seed" }))
-    );
-  }
-  if (startWeightLbs) {
-    await supabase.from("weight_logs").upsert(
-      { user_id: uid, logged_on: new Date().toISOString().slice(0, 10), weight_lbs: startWeightLbs },
-      { onConflict: "user_id,logged_on" }
-    );
-  }
+  await Promise.all([
+    starterGrocery?.length
+      ? supabase.from("grocery_items").insert(
+          starterGrocery.map(g => ({ user_id: uid, name: g.name, qty: g.qty || "", category: g.cat || "Other", done: !!g.done, source: "seed" }))
+        )
+      : Promise.resolve(),
+    startWeightLbs
+      ? supabase.from("weight_logs").upsert(
+          { user_id: uid, logged_on: new Date().toISOString().slice(0, 10), weight_lbs: startWeightLbs },
+          { onConflict: "user_id,logged_on" }
+        )
+      : Promise.resolve(),
+  ]);
 }
 
 export { lbsFromKg };

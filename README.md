@@ -119,9 +119,12 @@ nutricook-ai/
 │   ├── generate.js            # Anthropic proxy (auth + quota gate, streaming)
 │   ├── checkout.js            # Stripe Checkout session
 │   ├── stripe-webhook.js      # Subscription lifecycle → Supabase
+│   ├── admin/                 # allowlisted admin routes (helpers _*.js not routed)
 │   └── _lib/supabaseAdmin.js  # service-role helpers (not routed)
 ├── db/
-│   └── migration.sql          # schema + RLS + consume_quota RPC
+│   ├── migration.sql          # schema + RLS + consume_quota RPC
+│   ├── migration_ratelimit.sql    # rate_limit_hits + check_rate_limit RPC
+│   └── migration_admin_logs.sql   # admin_logs audit table (service-role only)
 ├── src/
 │   ├── lib/                   # supabase client, db access, quota/streak helpers
 │   ├── App.jsx                # legacy standalone version (unused)

@@ -10,4 +10,10 @@ export const hasSupabase = Boolean(url && anon);
 
 // Only the anon (public) key ever reaches the browser. Row-Level Security is what
 // keeps each user to their own rows; the service-role key stays in serverless.
-export const supabase = hasSupabase ? createClient(url, anon) : null;
+// persistSession: false keeps the access/refresh tokens in memory only (not
+// localStorage) — trade-off is the user is signed out on a hard page refresh,
+// which was an accepted trade-off to reduce token-theft surface (e.g. from a
+// compromised dependency) since nothing here needs "stay signed in forever".
+export const supabase = hasSupabase
+  ? createClient(url, anon, { auth: { persistSession: false } })
+  : null;
