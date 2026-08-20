@@ -65,11 +65,6 @@ With no Supabase environment variables configured, the app runs in **demo mode**
 
 NutriCook uses Supabase for auth and persistence, and Stripe for the Pro subscription. Both are optional — leave them unconfigured and the app runs in demo mode.
 
-<<<<<<< HEAD
-> **`artifacts/NutriCookAI_v2.tsx`** (the in-progress v2 build) already uses the backend-proxy approach: it calls `/api/generate` instead of the Anthropic API directly, so no key is ever entered in the browser. See the Vercel deployment section below for how that key is configured server-side.
-
----
-=======
 1. Create a free Supabase project, then copy the Project URL, `anon` key, and `service_role` key.
 2. Run `db/migration.sql` in the Supabase SQL editor to create tables, the `handle_new_user` trigger, RLS policies, and the `consume_quota` function.
 3. (Optional) Enable Google sign-in under Authentication → Providers.
@@ -85,7 +80,6 @@ NutriCook uses Supabase for auth and persistence, and Stripe for the Pro subscri
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | serverless | Pro checkout + webhook (optional) |
 
 **Security:** the `service_role` key stays server-side only; RLS confines every user to their own rows; the Stripe webhook signature is verified; the Anthropic key never reaches the browser.
->>>>>>> origin/main
 
 ## Deployment
 
@@ -93,20 +87,7 @@ NutriCook uses Supabase for auth and persistence, and Stripe for the Pro subscri
 # Vercel (recommended)
 npm install -g vercel && vercel
 
-<<<<<<< HEAD
-`api/generate.js` is a Vercel serverless function that proxies chat/vision requests to Anthropic, keeping the API key server-side. Set it in your Vercel project settings (Settings → Environment Variables):
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Redeploy after adding the variable. This is required for `artifacts/NutriCookAI_v2.tsx`'s AI Recipe Generator and Fridge Scan features to work in production.
-
-### Netlify
-```bash
-=======
 # Netlify
->>>>>>> origin/main
 npm run build
 # drag dist/ to netlify.com/drop
 ```

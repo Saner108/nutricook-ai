@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   let userId = null, email = null;
   if (supabaseConfigured) {
-    const user = await getUser(bearer(req));
+    const user = await getUser(bearer(req), { allowLocal: false });
     if (!user) {
       res.status(401).json({ error: { message: "Sign in required" } });
       return;

@@ -1,6 +1,7 @@
 // Shared serverless helpers for talking to Supabase with the SERVICE ROLE key.
 // Files under api/_lib are not routed by Vercel (leading underscore).
 // The service-role key bypasses RLS and must never reach the browser.
+import { localVerificationEnabled, verifyLocalToken } from "./localJwt.js";
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,8 +12,27 @@ const ANON = process.env.SUPABASE_ANON_KEY;
 export const supabaseConfigured = Boolean(URL && SERVICE);
 
 // Verify a user access token and return the auth user ({ id, email }) or null.
-export async function getUser(accessToken) {
+//
+// Tries local (no-network) verification first, but ONLY when
+// SUPABASE_JWT_SECRET is set AND allowLocal is true — see api/_lib/localJwt.js
+// for the trade-off this opts into (a revoked session stays valid here until
+// it expires, instead of being rejected instantly). Any local-verification
+// miss (disabled, env var absent, bad signature, expired token) falls through
+// to the original network-verified path unchanged.
+//
+// allowLocal defaults to true for ordinary routes, but api/admin/* passes
+// false explicitly: the local fast path is an acceptable trade-off for a
+// rate-limited scan/generate request, not for the highest-privilege surface
+// in the app, where a just-revoked session must be rejected immediately.
+export async function getUser(accessToken, { allowLocal = true } = {}) {
   if (!accessToken || !URL) return null;
+  if (allowLocal && localVerificationEnabled) {
+    const local = verifyLocalToken(accessToken);
+    if (local) return local;
+    // Falls through to the network check below — a local-verification miss
+    // is not necessarily an invalid token (e.g. secret misconfigured), and
+    // the network path is the source of truth either way.
+  }
   try {
     const r = await fetch(`${URL}/auth/v1/user`, {
       headers: { apikey: ANON || SERVICE, Authorization: `Bearer ${accessToken}` },

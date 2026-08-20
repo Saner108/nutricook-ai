@@ -1041,17 +1041,8 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
   const [streamName, setStreamName] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState(null);
   const inputRef = useRef(null);
-<<<<<<< HEAD
-  const fridgeInputRef = useRef(null);
-=======
   const fileRef = useRef(null);
-
-  // The Anthropic key lives server-side in /api/generate — never in the browser.
-  const apiKey = null;
->>>>>>> origin/main
 
   const addIng = val => {
     const t = val.trim().toLowerCase();
@@ -1068,56 +1059,12 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
   };
   const togglePref = id => setPrefs(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-<<<<<<< HEAD
-  const handleFridgePhoto = async e => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setScanning(true); setScanError(null);
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const base64 = dataUrl.split(",")[1];
-      const mediaType = file.type || "image/jpeg";
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 500,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-              { type: "text", text: `Look at this photo of a fridge or pantry and identify every distinct food ingredient you can see. Use short, common ingredient names (e.g. "chicken breast", "broccoli", "milk"). Respond ONLY with valid JSON — no markdown, no explanation:\n{"ingredients":[""]}` },
-            ],
-          }],
-        }),
-      });
-      const data = await res.json();
-      const text = data.content.map(b => b.text || "").join("");
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      const found = (parsed.ingredients || []).map(i => i.trim().toLowerCase()).filter(Boolean);
-      if (!found.length) { setScanError("No ingredients detected. Try another photo."); return; }
-      setIngredients(p => [...p, ...found.filter(i => !p.includes(i))]);
-    } catch {
-      setScanError("Couldn't scan photo. Try again.");
-    } finally {
-      setScanning(false);
-    }
-  };
-=======
   const q = inputVal.trim().toLowerCase();
   const suggestions = q
     ? INGREDIENT_DB.filter(x => x.includes(q) && !ingredients.includes(x))
         .sort((a, b) => (a.startsWith(q) ? 0 : 1) - (b.startsWith(q) ? 0 : 1))
         .slice(0, 6)
     : [];
->>>>>>> origin/main
 
   const generate = async () => {
     if (loading) return;
@@ -1138,16 +1085,9 @@ Respond ONLY with valid JSON — no markdown, no explanation:
 Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities; 3 recipes meaningfully different in cuisine or method.`;
     setStep("results");
     try {
-<<<<<<< HEAD
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-=======
-      const all = await streamRecipes(apiKey, prompt, ({ complete, partialName }) => {
+      const all = await streamRecipes(null, prompt, ({ complete, partialName }) => {
         setRecipes(complete);
         setStreamName(partialName);
->>>>>>> origin/main
       });
       setRecipes(all);
       setStreamName(null);
@@ -1236,26 +1176,11 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
       {/* Ingredient chips input */}
       <div style={{ ...card, padding: "16px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-<<<<<<< HEAD
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>
-            Your Ingredients <span style={{ color: T.g4, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— tap Enter to add</span>
-          </div>
-          <button onClick={() => fridgeInputRef.current?.click()} disabled={scanning} style={{
-            display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 99, border: "none",
-            background: scanning ? T.g2 : T.mintLight, color: T.mintDark, fontSize: 12, fontWeight: 700,
-            cursor: scanning ? "default" : "pointer", flexShrink: 0,
-          }}>
-            {scanning ? <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>🌀</span> : "📷"}
-            {scanning ? "Scanning..." : "Scan Fridge"}
-          </button>
-          <input ref={fridgeInputRef} type="file" accept="image/*" capture="environment" onChange={handleFridgePhoto} style={{ display: "none" }} />
-=======
           <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>Ingredients</div>
           <button onClick={() => { if (scanning) return; if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; } if (fileRef.current) fileRef.current.click(); }} style={{
             display: "flex", alignItems: "center", gap: 6, border: `1px solid ${T.g2}`, background: "transparent", color: T.g6, borderRadius: 99,
             padding: "7px 13px 7px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: scanning ? 0.7 : 1,
           }}><Icon name="camera" size={14} color={T.g6} />{scanning ? "Scanning…" : "Scan fridge"}</button>
->>>>>>> origin/main
         </div>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFridgePhoto} style={{ display: "none" }} />
         <div onClick={() => inputRef.current?.focus()} style={{
@@ -1300,11 +1225,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             }}>+ {s}</button>
           ))}
         </div>
-<<<<<<< HEAD
-        {scanError && <div style={{ marginTop: 10, fontSize: 12, color: T.error }}>⚠️ {scanError}</div>}
-=======
         <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: start typing to search · tap a match to add it · or scan a photo of your fridge</div>
->>>>>>> origin/main
       </div>
 
       {/* Goal selector */}

@@ -80,7 +80,7 @@ test("streamRecipes: streams the request, reports progressive updates, resolves 
 // wiring: the AI screen must generate via the tested streamRecipes pipeline.
 test("generate flow: AIScreen delegates to streamRecipes and renders progressive updates", () => {
   const src = readFileSync(fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8");
-  assert.match(src, /await streamRecipes\(apiKey, prompt/, "generate must call streamRecipes");
+  assert.match(src, /await streamRecipes\([^,]*, prompt/, "generate must call streamRecipes");
   assert.match(src, /setStreamName\(partialName\)/, "streaming updates must drive the skeleton name");
   assert.doesNotMatch(src, /const data = await res\.json\(\);\s*if \(data\.error\)/, "old non-streaming fetch parsing must be gone");
 });

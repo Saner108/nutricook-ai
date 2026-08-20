@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     // whichever identity we actually have: a signed-in non-admin is logged by
     // name, an unauthenticated caller leaves those columns null (admin_logs
     // allows that on purpose). One extra call, on the rejected path only.
-    const caller = await getUser(bearer(req));
+    const caller = await getUser(bearer(req), { allowLocal: false });
     await logAdminAction({
       adminUserId: caller?.id || null,
       adminEmail: caller?.email || null,

@@ -3,6 +3,14 @@
 import { getUser, bearer } from "../_lib/supabaseAdmin.js";
 import { isAllowlisted } from "./_allowlist.js";
 
+// Admin gating always uses network-verified identity (Supabase's live
+// /auth/v1/user), even if SUPABASE_JWT_SECRET is set elsewhere for the local
+// JWT fast path on /api/generate. Local verification cannot see a revoked
+// session until the token naturally expires, and that trade-off — acceptable
+// for a rate-limited scan/generate request — is not acceptable for the
+// highest-privilege surface in the app. Admin correctness matters more here
+// than shaving a network round-trip.
+
 // Returns the verified admin's { id, email }, or null if the caller is not one.
 //
 // The identity checked here comes ONLY from the access token, validated by
@@ -17,7 +25,7 @@ import { isAllowlisted } from "./_allowlist.js";
 // "authorized". Callers that need to record which of the two happened re-derive
 // it on the rejected path — see api/admin/getUser.js.
 export async function requireAdmin(req) {
-  const user = await getUser(bearer(req));
+  const user = await getUser(bearer(req), { allowLocal: false });
   if (!user || !user.email) return null;
   if (!isAllowlisted(user.email)) return null;
   return { id: user.id, email: user.email };
