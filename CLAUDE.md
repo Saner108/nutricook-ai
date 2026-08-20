@@ -1,51 +1,40 @@
-# CLAUDE.md
+# NutriCook AI
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+AI-powered meal planning app. Target users: fitness-minded individuals managing macros and meal prep.
 
-See `.claude/CLAUDE.md` for subagent usage rules and the frozen-contract list — read it before touching schema, migrations, API auth/quota, or design tokens.
+## Tech Stack
+- Frontend: React (Vite), `artifacts/NutriCookAI_v2.tsx` is the **only** shipped file — do not edit `src/App.jsx` (frozen/legacy)
+- Backend: Vercel serverless functions under `api/`
+- AI: Anthropic Claude via `api/generate.js` proxy (never call Anthropic directly from the frontend)
+- Auth/DB: Supabase (optional — app runs in demo mode without it)
+- Payments: Stripe via `api/checkout.js` + `api/stripe-webhook.js`
+
+## Key Files
+- `artifacts/NutriCookAI_v2.tsx` — full UI, all screens and components
+- `api/generate.js` — Anthropic proxy: auth + quota gate + SSE streaming
+- `src/lib/quota.js` — shared quota/streak logic (used by both UI and API)
+- `src/lib/db.js` — Supabase data layer
+- `src/design-system/tokens.js` — design tokens (frozen, always use `T.*`)
+- `db/migration*.sql` — apply manually in Supabase SQL editor; no migration runner
+
+## Frozen Contracts
+- `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — signature is frozen
+- Never add `<form>` tags, `localStorage`, or `sessionStorage`
+- Never call Anthropic from the browser — always go through `api/generate.js`
+- Never add client-side quota counting — `consume_quota` RPC is the source of truth
+- Design tokens `T.*` only — no raw hex values
+- Mobile frame: 430px max-width, frozen
 
 ## Commands
-
 ```bash
-npm install
-npm run dev          # Vite dev server, http://localhost:5173
-npm run build         # production build (dist/)
-npm run build:ds      # builds the design-system bundle only (vite.ds.config.js)
-npm run preview       # preview a production build
-
-node test/run.mjs     # run the full test suite (node:test, no separate test script defined)
-node --test test/quota.test.mjs   # run a single test file directly
+npm run dev       # dev server at localhost:5173
+npm run build     # production build
+node test/run.mjs # full test suite
 ```
 
-There is no lint script configured. GitHub Actions (`.github/workflows/`) runs tests + a build smoke-check on every push/PR to `main`; Vercel auto-deploys `main` separately.
+## Sub-agents (.claude/agents/)
+schema-planner → migration-executor → api-auth-builder → test-runner
+Always: plan → Cesar approves → execute → verify → Cesar commits manually
 
-`test/run.mjs` is a custom runner: it invokes `node:test` over every `test/*.test.mjs` file and also writes results to `.claude/tdd-guard/data/test.json` (in both this repo root and its parent, since tdd-guard resolves `.claude/` relative to wherever the session started) because tdd-guard has no built-in `node:test` reporter. Prefer `node test/run.mjs` over `node --test` directly when the tdd-guard plugin is in use.
-
-## Architecture
-
-**The shipped app is `artifacts/NutriCookAI_v2.tsx`** (~2400 lines, all screens + components), entered via `src/main.jsx`. `src/App.jsx` is a legacy standalone build and is frozen/unused — do not edit it.
-
-**Client → server → AI flow:** the UI calls `/api/generate` (never the Anthropic API directly), which streams SSE deltas back that get parsed incrementally so recipes render as they arrive. Locally, `vite.config.js` registers dev-only middleware (`configureServer`) on `/api/generate` and `/api/checkout` that proxies to Anthropic when `ANTHROPIC_API_KEY` is set, and otherwise serves realistic streamed mocks — so the UI works fully offline in dev. In production these paths are Vercel serverless functions under `api/`.
-
-**Demo mode:** with no Supabase env vars configured, the app runs entirely on session-only mock data with no login required — this is the default local dev experience.
-
-**Backend layout (`api/`):**
-- `api/generate.js` — Anthropic proxy: auth + quota gate, then streams the response
-- `api/checkout.js`, `api/stripe-webhook.js` — Stripe subscription checkout and lifecycle sync to Supabase
-- `api/admin/` — allowlisted admin routes; files prefixed `_` (`_allowlist.js`, `_logAction.js`, `_requireAdmin.js`) are helpers, not routed endpoints
-- `api/_lib/supabaseAdmin.js` — service-role Supabase client, server-only
-
-**Quota/streak logic** lives in `src/lib/quota.js` as pure functions shared (via duplication, not import — check before assuming a single source) between frontend display and the serverless quota gate. Server-side `consume_quota` RPC (defined in `db/migration.sql`) is the actual source of truth for enforcement; client-side numbers are display-only.
-
-**Database:** three migration files in `db/`, applied manually in the Supabase SQL editor — there's no migration runner:
-- `migration.sql` — core schema, RLS policies, `handle_new_user` trigger, `consume_quota` RPC
-- `migration_ratelimit.sql` — `rate_limit_hits` table + `check_rate_limit` RPC
-- `migration_admin_logs.sql` — service-role-only audit log
-
-**Design system:** `src/design-system/` holds reusable components (Button, MacroBar, MacroRow, MealCard, Ring, AICard) and `tokens.js`, exported as `T`. All styling in the shipped app must reference `T` — no raw hex (enforced as a frozen contract, see `.claude/CLAUDE.md`).
-
-**Subagents** (`.claude/agents/`): `schema-planner`, `migration-executor`, `api-auth-builder`, `test-runner` implement a plan → human-approval → execute → verify workflow for backend/schema changes. Full rules in `.claude/CLAUDE.md`.
-
-## Known repo state
-
-`README.md` currently has unresolved git merge-conflict markers (`<<<<<<<`/`=======`/`>>>>>>>`) in the Backend Setup and Deployment sections — be aware the content there is a merged-but-unresolved mix of two branches, not necessarily accurate as written.
+## Skills
+- /repo-routine: Full repo audit + AI-firstify + UX review (see .claude/skills/repo-routine/)
