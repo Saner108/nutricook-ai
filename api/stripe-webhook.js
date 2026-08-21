@@ -20,6 +20,15 @@ function readRawBody(req) {
 function signatureValid(secret, sigHeader, payload) {
   const parts = Object.fromEntries(String(sigHeader).split(",").map(p => p.split("=")));
   if (!parts.t || !parts.v1) return false;
+
+  // Replay-attack guard: reject webhooks with a timestamp older than 300 seconds
+  // (Stripe's recommended tolerance). Without this, a valid signed payload from
+  // hours or days ago could be replayed to trigger duplicate subscription writes.
+  const ts = parseInt(parts.t, 10);
+  if (!Number.isFinite(ts)) return false;
+  const ageSeconds = Math.floor(Date.now() / 1000) - ts;
+  if (ageSeconds > 300 || ageSeconds < -60) return false; // also reject future-dated payloads
+
   const expected = crypto.createHmac("sha256", secret).update(`${parts.t}.${payload}`).digest("hex");
   const a = Buffer.from(expected);
   const b = Buffer.from(parts.v1);

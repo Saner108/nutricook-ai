@@ -45,6 +45,7 @@ export function verifyLocalToken(token) {
     const now = Math.floor(Date.now() / 1000);
     if (typeof payload.exp !== "number" || payload.exp <= now) return null; // expired
     if (typeof payload.iat === "number" && payload.iat > now + 60) return null; // clock-skew sanity check
+    if (typeof payload.nbf === "number" && payload.nbf > now + 60) return null; // not yet valid
 
     const id = payload.sub;
     const email = payload.email;

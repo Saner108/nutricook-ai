@@ -34,7 +34,17 @@ export default async function handler(req, res) {
     res.status(400).json({ error: { message: "Invalid JSON body" } });
     return;
   }
-  const { max_tokens, messages, stream } = body;
+  const { max_tokens: clientTokens, messages, stream } = body;
+
+  // Cap max_tokens server-side — the client value is advisory, not trusted.
+  // Recipe generation needs ~1500, remix ~1200, scan ~300. A crafted request
+  // could otherwise claim max_tokens: 100000 and burn the entire API budget.
+  // 2000 is generous for all legitimate use cases and blocks runaway requests.
+  const MAX_TOKENS_CAP = 2000;
+  const max_tokens = Math.min(
+    typeof clientTokens === "number" && clientTokens > 0 ? clientTokens : MAX_TOKENS_CAP,
+    MAX_TOKENS_CAP
+  );
 
   // Pin allowed models server-side — never trust the client-supplied model
   // string. A crafted request could otherwise use claude-opus-4-6 at 15×
