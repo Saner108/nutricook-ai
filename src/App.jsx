@@ -1,3 +1,9 @@
+// ╔══════════════════════════════════════════════════════════╗
+// ║  FROZEN / LEGACY — DO NOT EDIT                          ║
+// ║  The shipped app is artifacts/NutriCookAI_v2.tsx        ║
+// ║  This file is preserved for reference only.             ║
+// ║  Direct Anthropic API call below is intentional legacy. ║
+// ╚══════════════════════════════════════════════════════════╝
 import { useState, useEffect, useRef } from "react";
 
 // ── Tokens ──────────────────────────────────────────────

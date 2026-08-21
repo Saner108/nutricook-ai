@@ -284,7 +284,7 @@ function Btn({ label, onPress, primary, small, style: st }) {
 }
 
 // ── Meal Card ────────────────────────────────────────────
-function MealCard({ meal, compact, isFav, onFav }) {
+function MealCard({ meal, compact, isFav, onFav, onSwap }) {
   const [open, setOpen] = useState(false);
   const [localFav, setLocalFav] = useState(false);
   const fav = onFav ? !!isFav : localFav; // controlled when wired to app-level favorites
@@ -329,7 +329,7 @@ function MealCard({ meal, compact, isFav, onFav }) {
         {!compact && (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn label="View Recipe" small onPress={() => setOpen(!open)} style={{ flex: 1 }} />
-            <Btn label="Swap" small onPress={() => {}} style={{ flex: 1 }} />
+            <Btn label="Swap" small onPress={() => onSwap?.(meal)} style={{ flex: 1 }} />
             <button onClick={() => (onFav ? onFav(meal) : setLocalFav(f => !f))} style={{ width: 40, height: 40, borderRadius: 14, border: `1px solid ${fav ? T.mintDark : T.g2}`, background: fav ? T.mintLight : T.white, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: fav ? T.mintDark : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)" }}><Icon name="heart" size={17} color={fav ? T.mintDark : T.g5} sw={fav ? 2.2 : 1.7} /></button>
           </div>
         )}
@@ -847,7 +847,7 @@ function PlanScreen({ setTab, favorites, toggleFavorite, targets = TARGETS, live
             </button>
             {isOpen && planned && (
               <div style={{ marginTop: 6, animation: "popIn .25s ease both" }}>
-                <MealCard meal={meal} isFav={favorites.some(f => f.name === meal.name)} onFav={toggleFavorite} />
+                <MealCard meal={meal} isFav={favorites.some(f => f.name === meal.name)} onFav={toggleFavorite} onSwap={() => setTab("ai")} />
               </div>
             )}
             {isOpen && !planned && (
