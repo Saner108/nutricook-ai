@@ -1080,9 +1080,15 @@ function downscaleImageToBase64(file, { maxDim = 1024, quality = 0.72 } = {}) {
   });
 }
 
+// ── Ingredient quantity parser ────────────────────────────────────────────────
+// Defined in src/lib/ingredients.js — imported here for the bundler.
+// See that file for parseIngredientInput() and ingLabel() documentation.
+import { parseIngredientInput, ingLabel } from "../src/lib/ingredients.js";
+
+// ── AI Screen ────────────────────────────────────────────────────────────────
 function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPaywall }) {
   const [step, setStep] = useState("input"); // input | results
-  const [ingredients, setIngredients] = useState([]);
+  const [ingredients, setIngredients] = useState([]); // [{name: string, qty: string}]
   const [inputVal, setInputVal] = useState("");
   const [goal, setGoal] = useState("Muscle Gain");
   const [loading, setLoading] = useState(false);
@@ -1093,27 +1099,49 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
   const inputRef = useRef(null);
   const fileRef = useRef(null);
 
+  // Add an ingredient — parse quantity from the raw string, deduplicate by name.
   const addIng = val => {
-    const t = val.trim().toLowerCase();
-    if (t && !ingredients.includes(t)) setIngredients(p => [...p, t]);
+    const parsed = parseIngredientInput(val.trim());
+    if (!parsed.name) return;
+    setIngredients(p => {
+      const exists = p.find(i => i.name === parsed.name);
+      if (exists) {
+        // Update qty if the user re-typed the same ingredient with a new quantity
+        return parsed.qty
+          ? p.map(i => i.name === parsed.name ? { ...i, qty: parsed.qty } : i)
+          : p;
+      }
+      return [...p, parsed];
+    });
     setInputVal("");
   };
+
   const handleKey = e => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      const t = inputVal.trim().toLowerCase();
-      addIng(t && !INGREDIENT_DB.includes(t) && suggestions.length ? suggestions[0] : inputVal);
+      const raw = inputVal.trim();
+      const parsed = parseIngredientInput(raw);
+      // If user typed a bare name with no qty and there's an autocomplete match, use it
+      const useMatch = raw && !INGREDIENT_DB.includes(parsed.name) && suggestions.length;
+      addIng(useMatch ? suggestions[0] : raw);
+    } else if (e.key === "Backspace" && inputVal === "" && ingredients.length > 0) {
+      setIngredients(p => p.slice(0, -1));
     }
-    else if (e.key === "Backspace" && inputVal === "" && ingredients.length > 0) setIngredients(p => p.slice(0, -1));
   };
   const togglePref = id => setPrefs(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const q = inputVal.trim().toLowerCase();
-  const suggestions = q
-    ? INGREDIENT_DB.filter(x => x.includes(q) && !ingredients.includes(x))
-        .sort((a, b) => (a.startsWith(q) ? 0 : 1) - (b.startsWith(q) ? 0 : 1))
-        .slice(0, 6)
-    : [];
+  // useMemo: only recompute suggestions when the query or ingredient list changes.
+  const suggestions = React.useMemo(() => {
+    if (!q) return [];
+    // Strip leading quantity from query before matching ingredient names
+    const { name: qName } = parseIngredientInput(q);
+    const searchTerm = qName || q;
+    return INGREDIENT_DB
+      .filter(x => x.includes(searchTerm) && !ingredients.some(i => i.name === x))
+      .sort((a, b) => (a.startsWith(searchTerm) ? 0 : 1) - (b.startsWith(searchTerm) ? 0 : 1))
+      .slice(0, 6);
+  }, [q, ingredients]);
 
   const generate = async () => {
     if (loading) return;
@@ -1125,10 +1153,12 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
     useQuota("gen");
     setError(null);
     setLoading(true); setError(null); setRecipes([]); setStreamName(null);
+    const ingList = ingredients.map(ingLabel).join(", ");
+    const hasQty = ingredients.some(i => i.qty);
     const prefStr = prefs.length ? `Dietary requirements (strictly follow): ${prefs.join(", ")}.` : "";
-    const prompt = `You are a professional nutritionist and chef. Generate exactly 3 different recipes using primarily: ${ingredients.join(", ")}.
+    const prompt = `You are a professional nutritionist and chef. Generate exactly 3 different recipes using primarily: ${ingList}.
 Goal: ${goal}. ${prefStr}
-You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do NOT add major ingredients.
+${hasQty ? "Ingredient quantities are provided — use them to calculate accurate per-serving macros." : ""}You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do NOT add major ingredients.
 Respond ONLY with valid JSON — no markdown, no explanation:
 {"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":["1 lb chicken breast"],"steps":[""]}]}
 Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; calories must equal (protein g × 4) + (carbs g × 4) + (fat g × 9) rounded to the nearest 5; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities; 3 recipes meaningfully different in cuisine or method.`;
@@ -1166,7 +1196,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
             model: "claude-sonnet-4-6", max_tokens: 300,
             messages: [{ role: "user", content: [
               { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-              { type: "text", text: 'List only the food ingredients visible. Respond ONLY with JSON: {"ingredients":["item1","item2"]}' },
+              { type: "text", text: 'List food ingredients visible. If you can read a weight or quantity from packaging (e.g. "1 lb", "200g", "12 oz"), include it. Respond ONLY with JSON: {"ingredients":[{"name":"chicken breast","qty":"1 lb"},{"name":"eggs","qty":"12"}]}' },
             ] }],
           }),
         });
@@ -1174,9 +1204,23 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         const data = await res.json();
         const text = (data.content || []).map(b => b.text || "").join("");
         const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-        const found = (parsed.ingredients || []).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+        const raw = parsed.ingredients || [];
+        // Support both {name,qty} object format and plain string format
+        const found = raw.map(item =>
+          typeof item === "string"
+            ? parseIngredientInput(item)
+            : { name: String(item.name || "").trim().toLowerCase(), qty: String(item.qty || "").trim() }
+        ).filter(i => i.name);
         if (!found.length) setError("No ingredients spotted — try a clearer, closer photo.");
-        else setIngredients(p => [...p, ...found.filter(f => !p.includes(f))]);
+        else setIngredients(p => {
+          const next = [...p];
+          found.forEach(f => {
+            const exists = next.find(i => i.name === f.name);
+            if (!exists) next.push(f);
+            else if (f.qty && !exists.qty) exists.qty = f.qty; // enrich with qty if scan found one
+          });
+          return next;
+        });
       } catch {
         setError("Fridge scan failed — please try again.");
       } finally {
@@ -1192,7 +1236,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         <div>
           <div style={{ fontSize: 22, fontWeight: 600, color: T.black, letterSpacing: -0.4 }}>Your recipes</div>
           <div style={{ fontSize: 12, color: T.g4 }}>
-            {loading ? `Cooking up ideas for ${goal}…` : `${ingredients.slice(0, 3).join(", ")}${ingredients.length > 3 ? ` +${ingredients.length - 3} more` : ""}`}
+            {loading ? `Cooking up ideas for ${goal}…` : `${ingredients.slice(0, 3).map(i => i.name).join(", ")}${ingredients.length > 3 ? ` +${ingredients.length - 3} more` : ""}`}
           </div>
         </div>
       </div>
@@ -1237,15 +1281,16 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
           display: "flex", flexWrap: "wrap", gap: 7, alignItems: "flex-start", cursor: "text", background: T.g1,
         }}>
           {ingredients.map(ing => (
-            <span key={ing} style={{ background: T.mintDark, color: T.onAccent, borderRadius: 99, padding: "5px 12px 5px 14px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
-              {ing}
-              <button onClick={e => { e.stopPropagation(); setIngredients(p => p.filter(i => i !== ing)); }}
+            <span key={ing.name} style={{ background: T.mintDark, color: T.onAccent, borderRadius: 99, padding: "5px 12px 5px 14px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7 }}>
+              {ing.qty && <span style={{ opacity: 0.75, fontWeight: 500, fontSize: 11 }}>{ing.qty} ·</span>}
+              {ing.name}
+              <button onClick={e => { e.stopPropagation(); setIngredients(p => p.filter(i => i.name !== ing.name)); }}
                 style={{ background: "rgba(255,255,255,0.2)", border: "none", color: T.onAccent, cursor: "pointer", padding: 0, fontSize: 14, width: 18, height: 18, borderRadius: 99, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
             </span>
           ))}
           <input ref={inputRef} value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKey}
             onBlur={() => inputVal.trim() && addIng(inputVal)}
-            placeholder={!ingredients.length ? "Search ingredients — try 'chick'..." : ""}
+            placeholder={!ingredients.length ? "Try '8 oz chicken' or just 'eggs'…" : "Add more (e.g. 2 cups spinach)…"}
             style={{ border: "none", outline: "none", background: "transparent", fontSize: 14, color: T.black, minWidth: 160, flex: 1, padding: "4px 0" }}
           />
         </div>
@@ -1253,7 +1298,12 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         {suggestions.length > 0 && (
           <div style={{ marginTop: 8, background: T.white, border: `1.5px solid ${T.g2}`, borderRadius: 14, overflow: "hidden", boxShadow: shadow.md, animation: "popIn .25s ease both" }}>
             {suggestions.map((s, i) => (
-              <button key={s} onMouseDown={e => e.preventDefault()} onClick={() => { addIng(s); inputRef.current?.focus(); }} style={{
+              <button key={s} onMouseDown={e => e.preventDefault()} onClick={() => {
+                // When user picks from autocomplete, preserve any qty they may have typed before the name
+                const { qty } = parseIngredientInput(inputVal.trim());
+                addIng(qty ? `${qty} ${s}` : s);
+                inputRef.current?.focus();
+              }} style={{
                 display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "11px 14px",
                 border: "none", background: "transparent", cursor: "pointer", fontSize: 14, color: T.black,
                 borderBottom: i < suggestions.length - 1 ? `1px solid ${T.g1}` : "none",
@@ -1266,15 +1316,15 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
         )}
         {/* Quick adds */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-          {["chicken","rice","broccoli","eggs","avocado"].filter(i => !ingredients.includes(i)).map(s => (
-            <button key={s} onClick={() => setIngredients(p => [...p, s])} style={{
+          {["chicken","rice","broccoli","eggs","avocado"].filter(i => !ingredients.some(ing => ing.name === i)).map(s => (
+            <button key={s} onClick={() => setIngredients(p => [...p, { name: s, qty: "" }])} style={{
               padding: "5px 12px", borderRadius: 99, border: `1.5px dashed ${T.g3}`,
               background: "transparent", color: T.g4, fontSize: 12, cursor: "pointer", fontWeight: 500,
               transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
             }}>+ {s}</button>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: start typing to search · tap a match to add it · or scan a photo of your fridge</div>
+        <div style={{ fontSize: 11, color: T.g4, marginTop: 8 }}>Tip: include weight for better accuracy — "8 oz chicken", "200g salmon", "2 cups rice" · or scan your fridge</div>
       </div>
 
       {/* Goal selector */}
