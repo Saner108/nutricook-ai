@@ -15,7 +15,10 @@ AI-powered meal planning app. Target users: fitness-minded individuals managing 
 - `src/lib/quota.js` — shared quota/streak logic (used by both UI and API)
 - `src/lib/db.js` — Supabase data layer
 - `src/design-system/tokens.js` — design tokens (frozen, always use `T.*`)
-- `db/migration*.sql` — apply manually in Supabase SQL editor; no migration runner
+- `db/migration.sql` — **run first**: core schema, RLS, triggers, `consume_quota` RPC
+- `db/migration_ratelimit.sql` — **run second**: `rate_limit_hits` table + `check_rate_limit` RPC
+- `db/migration_admin_logs.sql` — **run third**: append-only audit log for admin actions
+- `db/migration_indexes.sql` — **run last (anytime)**: performance indexes on `user_id` columns; safe to apply after the others without downtime
 
 ## Frozen Contracts
 - `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — signature is frozen
