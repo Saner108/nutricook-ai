@@ -25,6 +25,13 @@ AI-powered meal planning app. Target users: fitness-minded individuals managing 
 - Design tokens `T.*` only — no raw hex values
 - Mobile frame: 430px max-width, frozen
 
+## Model Allowlist
+`api/generate.js` pins allowed models server-side (`ALLOWED_MODELS` set). When a new Claude model needs to be used, **both** files must be updated together:
+1. Client call site in `artifacts/NutriCookAI_v2.tsx`
+2. `ALLOWED_MODELS` in `api/generate.js`
+
+Unknown model strings silently fall back to `claude-sonnet-4-6`.
+
 ## Commands
 ```bash
 npm run dev       # dev server at localhost:5173
