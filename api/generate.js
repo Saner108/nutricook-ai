@@ -34,7 +34,17 @@ export default async function handler(req, res) {
     res.status(400).json({ error: { message: "Invalid JSON body" } });
     return;
   }
-  const { model, max_tokens, messages, stream } = body;
+  const { max_tokens, messages, stream } = body;
+
+  // Pin allowed models server-side — never trust the client-supplied model
+  // string. A crafted request could otherwise use claude-opus-4-6 at 15×
+  // the cost. Scan requests need vision; recipe generation uses sonnet.
+  const ALLOWED_MODELS = new Set([
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6",
+  ]);
+  const clientModel = body.model || "";
+  const model = ALLOWED_MODELS.has(clientModel) ? clientModel : "claude-sonnet-4-6";
 
   // Auth + rate limit + quota gate (only when Supabase is configured).
   if (supabaseConfigured) {
