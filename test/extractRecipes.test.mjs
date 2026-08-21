@@ -12,7 +12,7 @@ function loadFn(name) {
   assert.ok(match, `${name} not found in NutriCookAI_v2.tsx`);
   return new Function(`${match[0]}; return ${name};`)();
 }
-const loadExtractRecipes = () => loadFn("extractRecipes");
+const loadExtractRecipes = () => loadFnWith("extractRecipes", ["sanitizeMacros"]);
 
 // like loadFn but also pulls in helper functions the target calls
 function loadFnWith(name, deps) {
@@ -93,7 +93,7 @@ test("results screen: skeleton card renders while streaming, showing partial rec
 
 test("extractRecipes: escaped quotes inside strings don't break parsing", () => {
   const extractRecipes = loadExtractRecipes();
-  const { complete } = extractRecipes('{"recipes":[{"name":"Say \\"yum\\"","steps":["a"]},');
+  const { complete } = extractRecipes('{"recipes":[{"name":"Say \\"yum\\"","macros":{"calories":400,"protein":30,"carbs":40,"fat":10},"steps":["a"]},');
   assert.equal(complete.length, 1);
   assert.equal(complete[0].name, 'Say "yum"');
 });

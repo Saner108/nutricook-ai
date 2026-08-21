@@ -119,25 +119,25 @@ const TODAY = (NOW.getDay() + 6) % 7; // Monday-first index of today
 const WEEK_DATES = DAYS.map((_, i) => { const d = new Date(NOW); d.setDate(NOW.getDate() - TODAY + i); return d.getDate(); });
 
 const MEALS = [
-  { id:1, type:"Breakfast", name:"Egg & Avocado Toast", kcal:520, protein:28, carbs:42, fat:18, time:"8:30 AM", prep:"10 min", difficulty:"Easy", done:true, emoji:"🍳", confidence:96 },
-  { id:2, type:"Lunch", name:"Grilled Chicken Bowl", kcal:680, protein:52, carbs:68, fat:18, time:"12:30 PM", prep:"20 min", difficulty:"Easy", done:true, emoji:"🥗", confidence:94 },
-  { id:3, type:"Snack", name:"Greek Yogurt & Berries", kcal:180, protein:18, carbs:22, fat:4, time:"3:30 PM", prep:"2 min", difficulty:"Easy", done:true, emoji:"🫐", confidence:92 },
-  { id:4, type:"Dinner", name:"Salmon & Quinoa", kcal:680, protein:48, carbs:52, fat:22, time:"7:00 PM", prep:"30 min", difficulty:"Medium", done:false, emoji:"🐟", confidence:98 },
+  { id:1, type:"Breakfast", name:"Egg & Avocado Toast", kcal:440, protein:28, carbs:42, fat:18, time:"8:30 AM", prep:"10 min", difficulty:"Easy", done:true, emoji:"🍳", confidence:96 },
+  { id:2, type:"Lunch", name:"Grilled Chicken Bowl", kcal:640, protein:52, carbs:68, fat:18, time:"12:30 PM", prep:"20 min", difficulty:"Easy", done:true, emoji:"🥗", confidence:94 },
+  { id:3, type:"Snack", name:"Greek Yogurt & Berries", kcal:195, protein:18, carbs:22, fat:4, time:"3:30 PM", prep:"2 min", difficulty:"Easy", done:true, emoji:"🫐", confidence:92 },
+  { id:4, type:"Dinner", name:"Salmon & Quinoa", kcal:600, protein:48, carbs:52, fat:22, time:"7:00 PM", prep:"30 min", difficulty:"Medium", done:false, emoji:"🐟", confidence:98 },
 ];
 
 
 // Deterministic meal history — same past day always shows the same meals.
 const MEAL_POOL = [
-  { name:"Veggie Omelette & Sourdough", emoji:"🍳", kcal:440, protein:27, carbs:36, fat:20, prep:"12 min", difficulty:"Easy" },
-  { name:"Turkey & Sweet Potato Skillet", emoji:"🥔", kcal:610, protein:44, carbs:54, fat:22, prep:"25 min", difficulty:"Medium" },
-  { name:"Overnight Oats & Berries", emoji:"🍚", kcal:390, protein:22, carbs:58, fat:9, prep:"5 min", difficulty:"Easy" },
-  { name:"Beef & Broccoli Rice Bowl", emoji:"🥣", kcal:650, protein:46, carbs:62, fat:21, prep:"30 min", difficulty:"Medium" },
+  { name:"Veggie Omelette & Sourdough", emoji:"🍳", kcal:430, protein:27, carbs:36, fat:20, prep:"12 min", difficulty:"Easy" },
+  { name:"Turkey & Sweet Potato Skillet", emoji:"🥔", kcal:590, protein:44, carbs:54, fat:22, prep:"25 min", difficulty:"Medium" },
+  { name:"Overnight Oats & Berries", emoji:"🍚", kcal:400, protein:22, carbs:58, fat:9, prep:"5 min", difficulty:"Easy" },
+  { name:"Beef & Broccoli Rice Bowl", emoji:"🥣", kcal:620, protein:46, carbs:62, fat:21, prep:"30 min", difficulty:"Medium" },
   { name:"Cottage Cheese & Pineapple", emoji:"🍍", kcal:210, protein:24, carbs:20, fat:4, prep:"2 min", difficulty:"Easy" },
-  { name:"Lemon Herb Cod & Couscous", emoji:"🐟", kcal:540, protein:42, carbs:48, fat:16, prep:"25 min", difficulty:"Medium" },
-  { name:"Peanut Butter Banana Toast", emoji:"🍌", kcal:340, protein:14, carbs:44, fat:14, prep:"5 min", difficulty:"Easy" },
-  { name:"Chicken Fajita Wraps", emoji:"🌮", kcal:590, protein:41, carbs:56, fat:19, prep:"20 min", difficulty:"Easy" },
-  { name:"Tofu Veggie Stir-Fry", emoji:"🥘", kcal:480, protein:28, carbs:46, fat:20, prep:"18 min", difficulty:"Easy" },
-  { name:"Protein Smoothie Bowl", emoji:"🥤", kcal:320, protein:30, carbs:38, fat:7, prep:"5 min", difficulty:"Easy" },
+  { name:"Lemon Herb Cod & Couscous", emoji:"🐟", kcal:505, protein:42, carbs:48, fat:16, prep:"25 min", difficulty:"Medium" },
+  { name:"Peanut Butter Banana Toast", emoji:"🍌", kcal:360, protein:14, carbs:44, fat:14, prep:"5 min", difficulty:"Easy" },
+  { name:"Chicken Fajita Wraps", emoji:"🌮", kcal:560, protein:41, carbs:56, fat:19, prep:"20 min", difficulty:"Easy" },
+  { name:"Tofu Veggie Stir-Fry", emoji:"🥘", kcal:475, protein:28, carbs:46, fat:20, prep:"18 min", difficulty:"Easy" },
+  { name:"Protein Smoothie Bowl", emoji:"🥤", kcal:335, protein:30, carbs:38, fat:7, prep:"5 min", difficulty:"Easy" },
 ];
 function historyFor(offsetDays) {
   const slots = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -425,6 +425,9 @@ function AICard({ recipe, index, onSave, onReplace }) {
         <MacroBar label="Protein" value={recipe.macros.protein} max={80} color={T.protein} />
         <MacroBar label="Carbohydrates" value={recipe.macros.carbs} max={120} color={T.carbs} />
         <MacroBar label="Fat" value={recipe.macros.fat} max={60} color={T.fat} />
+        <p style={{ fontSize: 10, color: T.g4, marginTop: 6, textAlign: "right", letterSpacing: "0.02em" }}>
+          AI-estimated nutrition · values are approximate
+        </p>
       </div>
       {/* Steps */}
       <div style={{ padding: "12px 18px" }}>
@@ -493,6 +496,26 @@ function AICard({ recipe, index, onSave, onReplace }) {
 }
 
 // ── Streaming helpers (pure; unit-tested in test/) ───────
+// Clamp and self-correct macros from AI-generated recipes.
+// Claude's calorie estimates sometimes deviate from the actual 4/4/9 formula.
+// This function:
+//   1. Coerces all fields to non-negative integers
+//   2. If stated calories differ >10% from (protein×4 + carbs×4 + fat×9),
+//      replaces them with the calculated value (rounded to nearest 5)
+// Applied in extractRecipes() so every recipe in the UI is internally consistent.
+function sanitizeMacros(macros) {
+  if (!macros || typeof macros !== "object") return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  const protein = Math.max(0, Math.round(Number(macros.protein) || 0));
+  const carbs   = Math.max(0, Math.round(Number(macros.carbs)   || 0));
+  const fat      = Math.max(0, Math.round(Number(macros.fat)     || 0));
+  const calcKcal = protein * 4 + carbs * 4 + fat * 9;
+  const stated   = Math.max(0, Math.round(Number(macros.calories) || 0));
+  const calories = stated > 0 && Math.abs(stated - calcKcal) / stated <= 0.10
+    ? stated
+    : Math.round(calcKcal / 5) * 5;
+  return { calories, protein, carbs, fat };
+}
+
 function extractRecipes(text) {
   const start = text.indexOf("[");
   const complete = [];
@@ -506,7 +529,7 @@ function extractRecipes(text) {
     if (ch === '"') { inStr = !inStr; continue; }
     if (inStr) continue;
     if (ch === "{") { if (depth === 0) objStart = i; depth++; }
-    else if (ch === "}") { depth--; if (depth === 0 && objStart !== -1) { try { complete.push(JSON.parse(text.slice(objStart, i + 1))); } catch {} objStart = -1; } }
+    else if (ch === "}") { depth--; if (depth === 0 && objStart !== -1) { try { const r = JSON.parse(text.slice(objStart, i + 1)); if (r && r.name && r.macros) { r.macros = sanitizeMacros(r.macros); complete.push(r); } } catch {} objStart = -1; } }
     else if (ch === "]" && depth === 0) break;
   }
   if (objStart !== -1) {
@@ -1108,7 +1131,7 @@ Goal: ${goal}. ${prefStr}
 You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do NOT add major ingredients.
 Respond ONLY with valid JSON — no markdown, no explanation:
 {"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":["1 lb chicken breast"],"steps":[""]}]}
-Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities; 3 recipes meaningfully different in cuisine or method.`;
+Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; calories must equal (protein g × 4) + (carbs g × 4) + (fat g × 9) rounded to the nearest 5; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities; 3 recipes meaningfully different in cuisine or method.`;
     setStep("results");
     try {
       const all = await streamRecipes(null, prompt, ({ complete, partialName }) => {
