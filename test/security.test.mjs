@@ -144,3 +144,54 @@ test("localJwt: iat (issued-at) clock-skew check is present", () => {
 test("localJwt: nbf (not-before) claim is checked", () => {
   assert.match(jwtSrc, /payload\.nbf/, "localJwt must check nbf claim");
 });
+
+// ── userIdFrom (stripe-webhook.js) ───────────────────────────────────────────
+
+function loadUserIdFrom() {
+  const src = readFileSync(
+    fileURLToPath(new URL("../api/stripe-webhook.js", import.meta.url)), "utf8"
+  );
+  const match = src.match(/function userIdFrom\([^)]*\) \{[\s\S]*?\n\}/);
+  assert.ok(match, "userIdFrom not found in stripe-webhook.js");
+  return new Function(`${match[0]}; return userIdFrom;`)();
+}
+const userIdFrom = loadUserIdFrom();
+
+test("userIdFrom: extracts client_reference_id (checkout.session shape)", () => {
+  assert.equal(userIdFrom({ client_reference_id: "user-abc" }), "user-abc");
+});
+
+test("userIdFrom: extracts metadata.user_id (subscription shape)", () => {
+  assert.equal(userIdFrom({ metadata: { user_id: "user-xyz" } }), "user-xyz");
+});
+
+test("userIdFrom: extracts subscription_data.metadata.user_id (checkout params shape)", () => {
+  assert.equal(
+    userIdFrom({ subscription_data: { metadata: { user_id: "user-deep" } } }),
+    "user-deep"
+  );
+});
+
+test("userIdFrom: returns null when no known field present", () => {
+  assert.equal(userIdFrom({}), null);
+  assert.equal(userIdFrom(null), null);
+  assert.equal(userIdFrom(undefined), null);
+});
+
+test("userIdFrom: client_reference_id takes precedence over metadata.user_id", () => {
+  // The OR chain resolves left-to-right; first truthy value wins
+  assert.equal(
+    userIdFrom({ client_reference_id: "first", metadata: { user_id: "second" } }),
+    "first"
+  );
+});
+
+// ── messages validation (generate.js source check) ───────────────────────────
+
+test("generate.js: validates messages is a non-empty array before hitting Anthropic", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../api/generate.js", import.meta.url)), "utf8"
+  );
+  assert.match(src, /Array\.isArray\(messages\)/, "messages must be validated with Array.isArray");
+  assert.match(src, /messages\.length === 0/, "generate.js must reject empty messages array");
+});

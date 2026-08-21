@@ -36,6 +36,14 @@ export default async function handler(req, res) {
   }
   const { max_tokens: clientTokens, messages, stream } = body;
 
+  // Validate messages before touching the API — undefined/null/empty would be
+  // silently dropped from JSON.stringify, sending Anthropic a body with no
+  // `messages` field and returning a cryptic 400 to the client.
+  if (!Array.isArray(messages) || messages.length === 0) {
+    res.status(400).json({ error: { message: "messages must be a non-empty array" } });
+    return;
+  }
+
   // Cap max_tokens server-side — the client value is advisory, not trusted.
   // Recipe generation needs ~1500, remix ~1200, scan ~300. A crafted request
   // could otherwise claim max_tokens: 100000 and burn the entire API budget.

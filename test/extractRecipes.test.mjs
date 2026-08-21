@@ -97,3 +97,59 @@ test("extractRecipes: escaped quotes inside strings don't break parsing", () => 
   assert.equal(complete.length, 1);
   assert.equal(complete[0].name, 'Say "yum"');
 });
+
+// ── getMealSteps ─────────────────────────────────────────────────────────────
+
+const getMealSteps = loadFn("getMealSteps");
+
+test("getMealSteps: Breakfast yogurt gets bowl instructions, not pan-fry", () => {
+  const steps = getMealSteps({ type: "Breakfast", name: "Greek Yogurt & Berries" });
+  assert.match(steps, /bowl|scoop|cold/i, "yogurt should get bowl-style steps");
+  assert.doesNotMatch(steps, /heat pan|cook.*minut/i, "yogurt must not get pan-fry steps");
+});
+
+test("getMealSteps: Breakfast toast gets toast instructions", () => {
+  const steps = getMealSteps({ type: "Breakfast", name: "Egg & Avocado Toast" });
+  assert.match(steps, /toast/i, "toast dish should reference toasting");
+});
+
+test("getMealSteps: Breakfast egg/omelette gets egg-specific steps", () => {
+  const steps = getMealSteps({ type: "Breakfast", name: "Veggie Omelette" });
+  assert.match(steps, /whisk|non-stick|fold/i, "egg dish should get egg-cooking steps");
+});
+
+test("getMealSteps: Snack yogurt gets cold/no-cook steps", () => {
+  const steps = getMealSteps({ type: "Snack", name: "Cottage Cheese & Pineapple" });
+  assert.match(steps, /No cooking|bowl|cold/i, "snack should not require cooking");
+});
+
+test("getMealSteps: Snack protein shake gets blender steps", () => {
+  const steps = getMealSteps({ type: "Snack", name: "Protein Smoothie Bowl" });
+  assert.match(steps, /blender|blend/i, "smoothie should reference blender");
+});
+
+test("getMealSteps: salmon gets fish-specific cooking steps", () => {
+  const steps = getMealSteps({ type: "Dinner", name: "Salmon & Quinoa" });
+  assert.match(steps, /fish|fillet|flake/i, "salmon should get fish-specific steps");
+  assert.doesNotMatch(steps, /Heat pan over medium heat\. Add oil and cook/i, "must not get generic steps");
+});
+
+test("getMealSteps: chicken gets sear/internal-temp instructions", () => {
+  const steps = getMealSteps({ type: "Lunch", name: "Grilled Chicken Breast" });
+  assert.match(steps, /chicken|165|sear/i, "chicken should get chicken-specific steps");
+});
+
+test("getMealSteps: bowl/rice dish gets grain cooking instructions", () => {
+  const steps = getMealSteps({ type: "Lunch", name: "Beef & Broccoli Rice Bowl" });
+  assert.match(steps, /grain|rice|quinoa|base/i, "bowl should reference grain cooking");
+});
+
+test("getMealSteps: wrap/taco gets tortilla warming steps", () => {
+  const steps = getMealSteps({ type: "Dinner", name: "Chicken Fajita Wraps" });
+  assert.match(steps, /tortilla|wrap/i, "wrap dish should reference tortilla");
+});
+
+test("getMealSteps: returns a non-empty string for any input", () => {
+  const unknown = getMealSteps({ type: "Dinner", name: "Mystery Casserole XYZ123" });
+  assert.ok(typeof unknown === "string" && unknown.length > 10, "fallback must return a usable string");
+});

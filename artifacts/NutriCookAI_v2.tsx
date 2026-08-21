@@ -300,12 +300,12 @@ function getMealSteps(meal) {
     return "Prepare and portion. No cooking required. Refrigerate if not eating immediately.";
   }
   if (n.includes("salmon") || n.includes("cod") || n.includes("tuna") || n.includes("fish")) return "Pat fish dry and season both sides. Heat oven to 400 °F or pan over medium-high with oil. Cook 3–4 min per side for fillets, or 12–15 min in the oven. Fish is done when it flakes easily. Serve with prepared sides.";
-  if (n.includes("chicken")) return "Season chicken on both sides. Heat pan over medium-high with a thin layer of oil. Sear 4–5 min per side until golden and cooked through (165 °F internal). Rest 3 min before slicing. Serve with prepared sides.";
   if (n.includes("stir") || n.includes("wok")) return "Prep all vegetables before cooking — stir-fry moves fast. Heat wok or large pan until very hot. Add oil, then protein, cook 2–3 min. Add vegetables and sauce. Toss constantly for 3–4 min. Serve over rice or noodles.";
-  if (n.includes("bowl") || n.includes("rice") || n.includes("quinoa")) return "Cook grain according to package (quinoa: 1:2 ratio, 15 min; rice: 1:1.5, 18 min). While grain cooks, prep and cook protein. Assemble bowls with grain base, protein, vegetables. Add sauce or dressing. Serve warm.";
-  if (n.includes("wrap") || n.includes("taco") || n.includes("burrito")) return "Warm tortilla in a dry pan 30 sec per side. Cook filling ingredients until hot through. Layer on tortilla — protein first, then vegetables and toppings. Fold and serve immediately.";
+  if (n.includes("wrap") || n.includes("taco") || n.includes("burrito") || n.includes("fajita")) return "Warm tortilla in a dry pan 30 sec per side. Cook filling ingredients until hot through. Layer on tortilla — protein first, then vegetables and toppings. Fold and serve immediately.";
   if (n.includes("salad")) return "Wash and dry all greens. Chop vegetables. If adding protein, cook and let cool slightly. Combine in a large bowl. Dress just before serving — toss gently to coat. Add croutons or nuts last.";
   if (n.includes("soup") || n.includes("stew")) return "Sauté aromatics (onion, garlic) in oil 3–4 min. Add remaining ingredients and enough liquid to cover. Bring to a boil, then reduce to a simmer. Cook 20–30 min until flavors meld. Season and serve hot.";
+  if (n.includes("bowl") || n.includes("rice") || n.includes("quinoa")) return "Cook grain according to package (quinoa: 1:2 ratio, 15 min; rice: 1:1.5, 18 min). While grain cooks, prep and cook protein. Assemble bowls with grain base, protein, vegetables. Add sauce or dressing. Serve warm.";
+  if (n.includes("chicken")) return "Season chicken on both sides. Heat pan over medium-high with a thin layer of oil. Sear 4–5 min per side until golden and cooked through (165 °F internal). Rest 3 min before slicing. Serve with prepared sides.";
   return `Prep all ${meal.name} ingredients. Cook protein to safe temperature, combine with other components, and season to taste. Plate and serve at the right temperature for the dish.`;
 }
 
