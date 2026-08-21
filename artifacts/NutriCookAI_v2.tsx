@@ -283,6 +283,32 @@ function Btn({ label, onPress, primary, small, style: st }) {
   );
 }
 
+// Returns simple but correct cooking steps based on meal name and type.
+// Better than one generic script for every meal — yogurt shouldn't get pan-fry instructions.
+function getMealSteps(meal) {
+  const n = (meal.name || "").toLowerCase();
+  if (meal.type === "Breakfast") {
+    if (n.includes("oat") || n.includes("smoothie") || n.includes("bowl")) return "Combine ingredients in a bowl. Add toppings of your choice. Serve immediately or refrigerate overnight.";
+    if (n.includes("toast") || n.includes("bread")) return "Toast bread to your preferred level. Prepare toppings — slice avocado, cook egg if needed. Layer and season with salt & pepper. Serve open-faced.";
+    if (n.includes("egg") || n.includes("omelette")) return "Whisk eggs with a pinch of salt. Heat a non-stick pan over medium heat with a touch of butter or oil. Add eggs and cook 2–3 min, folding in any fillings. Slide onto plate.";
+    if (n.includes("yogurt") || n.includes("cottage")) return "Scoop yogurt or cottage cheese into a bowl. Layer toppings — fruit first, then granola or nuts if using. Drizzle honey if desired. Eat immediately so toppings stay crisp.";
+    return "Prepare all ingredients. Combine and portion. Season to taste. Serve warm or chilled based on the dish.";
+  }
+  if (meal.type === "Snack") {
+    if (n.includes("yogurt") || n.includes("cottage") || n.includes("cheese")) return "Scoop into a bowl or container. Add fruit or toppings. No cooking needed — serve cold.";
+    if (n.includes("shake") || n.includes("protein") || n.includes("smoothie")) return "Add liquids to blender first, then protein powder and remaining ingredients. Blend 30–45 seconds until smooth. Pour and drink immediately.";
+    return "Prepare and portion. No cooking required. Refrigerate if not eating immediately.";
+  }
+  if (n.includes("salmon") || n.includes("cod") || n.includes("tuna") || n.includes("fish")) return "Pat fish dry and season both sides. Heat oven to 400 °F or pan over medium-high with oil. Cook 3–4 min per side for fillets, or 12–15 min in the oven. Fish is done when it flakes easily. Serve with prepared sides.";
+  if (n.includes("chicken")) return "Season chicken on both sides. Heat pan over medium-high with a thin layer of oil. Sear 4–5 min per side until golden and cooked through (165 °F internal). Rest 3 min before slicing. Serve with prepared sides.";
+  if (n.includes("stir") || n.includes("wok")) return "Prep all vegetables before cooking — stir-fry moves fast. Heat wok or large pan until very hot. Add oil, then protein, cook 2–3 min. Add vegetables and sauce. Toss constantly for 3–4 min. Serve over rice or noodles.";
+  if (n.includes("bowl") || n.includes("rice") || n.includes("quinoa")) return "Cook grain according to package (quinoa: 1:2 ratio, 15 min; rice: 1:1.5, 18 min). While grain cooks, prep and cook protein. Assemble bowls with grain base, protein, vegetables. Add sauce or dressing. Serve warm.";
+  if (n.includes("wrap") || n.includes("taco") || n.includes("burrito")) return "Warm tortilla in a dry pan 30 sec per side. Cook filling ingredients until hot through. Layer on tortilla — protein first, then vegetables and toppings. Fold and serve immediately.";
+  if (n.includes("salad")) return "Wash and dry all greens. Chop vegetables. If adding protein, cook and let cool slightly. Combine in a large bowl. Dress just before serving — toss gently to coat. Add croutons or nuts last.";
+  if (n.includes("soup") || n.includes("stew")) return "Sauté aromatics (onion, garlic) in oil 3–4 min. Add remaining ingredients and enough liquid to cover. Bring to a boil, then reduce to a simmer. Cook 20–30 min until flavors meld. Season and serve hot.";
+  return `Prep all ${meal.name} ingredients. Cook protein to safe temperature, combine with other components, and season to taste. Plate and serve at the right temperature for the dish.`;
+}
+
 // ── Meal Card ────────────────────────────────────────────
 function MealCard({ meal, compact, isFav, onFav, onSwap }) {
   const [open, setOpen] = useState(false);
@@ -335,7 +361,7 @@ function MealCard({ meal, compact, isFav, onFav, onSwap }) {
         )}
         {open && (
           <div style={{ marginTop: 12, padding: "12px", background: T.mintLight, borderRadius: 12, fontSize: 13, color: T.g6, lineHeight: 1.7, animation: "popIn .25s ease both" }}>
-            <strong>Steps:</strong> Heat pan over medium heat. Add oil and cook ingredients for 5–7 minutes. Season to taste. Plate and serve immediately. Enjoy your {meal.name}!
+            <strong>Steps:</strong> {getMealSteps(meal)}
           </div>
         )}
       </div>
@@ -1781,7 +1807,7 @@ function BottomNav({ tab, setTab }) {
   return (
     <div style={{
       position: "absolute", bottom: 0, left: 0, right: 0,
-      background: "rgba(247,246,243,0.88)", backdropFilter: "blur(22px)",
+      background: `color-mix(in srgb, var(--t-bg) 88%, transparent)`, backdropFilter: "blur(22px)",
       borderTop: `1px solid ${T.g2}`, paddingBottom: 8,
     }}>
       <div style={{ display: "flex", alignItems: "flex-end", height: 64 }}>
@@ -1810,6 +1836,25 @@ function BottomNav({ tab, setTab }) {
       </div>
     </div>
   );
+}
+
+// Live status-bar clock — updates every minute so the displayed time is always correct.
+function LiveClock() {
+  const [time, setTime] = useState(() => {
+    const d = new Date();
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/ (AM|PM)/, "");
+  });
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setTime(d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/ (AM|PM)/, ""));
+    };
+    // Align to the next full minute, then tick every 60s.
+    const msUntilNextMinute = (60 - new Date().getSeconds()) * 1000;
+    const initial = setTimeout(() => { tick(); setInterval(tick, 60000); }, msUntilNextMinute);
+    return () => clearTimeout(initial);
+  }, []);
+  return <span>{time}</span>;
 }
 
 // ── Main App (post-auth) ─────────────────────────────────
@@ -1937,7 +1982,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
       <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", background: T.bg, position: "relative", overflow: "hidden", fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" }}>
         {/* Status bar */}
         <div style={{ background: T.white, padding: "12px 20px 8px", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, color: T.black, borderBottom: `1px solid ${T.g1}` }}>
-          <span>9:41</span>
+          <LiveClock />
           <span style={{ fontSize: 11, color: T.mintDark, fontWeight: 700, letterSpacing: 0.5 }}>NUTRICOOK AI</span>
           {pro ? <span style={{ background: T.mintDark, color: T.onAccent, borderRadius: 99, padding: "1px 8px", fontSize: 10, fontWeight: 800, letterSpacing: 0.5 }}>PRO</span> : <span style={{ color: T.g4 }}>●●▮</span>}
         </div>
