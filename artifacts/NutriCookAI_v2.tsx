@@ -433,7 +433,16 @@ function AICard({ recipe, index, onSave, onReplace }) {
       <div style={{ padding: "12px 18px" }}>
         {recipe.ingredients && recipe.ingredients.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-            {recipe.ingredients.map(ing => <span key={ing} style={{ background: T.g1, borderRadius: 99, padding: "4px 10px", fontSize: 12, color: T.g5, fontWeight: 500 }}>{ing}</span>)}
+            {recipe.ingredients.map(raw => {
+              const { name, qty } = parseIngredientInput(String(raw));
+              const display = name.charAt(0).toUpperCase() + name.slice(1);
+              return (
+                <span key={raw} style={{ background: T.g1, borderRadius: 99, padding: "4px 10px", fontSize: 12, color: T.g5, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
+                  {qty && <span style={{ color: T.mintDark, fontWeight: 700, fontSize: 11 }}>{qty}</span>}
+                  {display}
+                </span>
+              );
+            })}
           </div>
         )}
         <button onClick={() => setOpen(!open)} style={{
@@ -2007,11 +2016,19 @@ function MainApp({ boot, mode, email, onSignOut }) {
   const saveRecipeToGrocery = recipe => {
     let added = [];
     setGroceryItems(p => {
-      const have = p.map(x => x.name.toLowerCase());
+      const have = new Set(p.map(x => x.name.toLowerCase()));
       added = (recipe.ingredients || [])
-        .map(n => String(n).trim())
-        .filter(n => n && !have.includes(n.toLowerCase()))
-        .map((n, i) => ({ id: Date.now() + i, name: n.charAt(0).toUpperCase() + n.slice(1), qty: "", cat: "From Recipes", done: false }));
+        .map(raw => {
+          // Claude returns ingredients as "1 lb chicken breast", "2 cups rice" etc.
+          // parseIngredientInput splits them so qty lands in its own field.
+          const { name, qty } = parseIngredientInput(String(raw).trim());
+          return { name: name.charAt(0).toUpperCase() + name.slice(1), qty };
+        })
+        .filter(({ name }) => name && !have.has(name.toLowerCase()))
+        .map(({ name, qty }, i) => ({
+          id: Date.now() * 1000 + i,   // * 1000 prevents index-offset collisions across rapid saves
+          name, qty, cat: "From Recipes", done: false,
+        }));
       return [...p, ...added];
     });
     return added;

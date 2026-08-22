@@ -100,3 +100,41 @@ test("ingLabel: null/undefined qty returns name", () => {
   assert.equal(ingLabel({ qty: null, name: "rice" }), "rice");
   assert.equal(ingLabel({ qty: undefined, name: "rice" }), "rice");
 });
+
+// ── saveRecipeToGrocery parsing contract (source-level) ──────────────────────
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+test("saveRecipeToGrocery: uses parseIngredientInput to split qty from name", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8"
+  );
+  // Must call parseIngredientInput inside saveRecipeToGrocery
+  const fn = src.slice(src.indexOf("saveRecipeToGrocery"), src.indexOf("saveRecipeToGrocery") + 900);
+  assert.match(fn, /parseIngredientInput/, "saveRecipeToGrocery must call parseIngredientInput");
+});
+
+test("saveRecipeToGrocery: uses Date.now() * 1000 + i for collision-safe IDs", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8"
+  );
+  const fn = src.slice(src.indexOf("saveRecipeToGrocery"), src.indexOf("saveRecipeToGrocery") + 900);
+  assert.match(fn, /Date\.now\(\)\s*\*\s*1000/, "IDs must use Date.now() * 1000 to prevent index-offset collisions");
+});
+
+test("parseIngredientInput round-trip: claude ingredient strings parse correctly", () => {
+  // Typical strings Claude returns in recipe.ingredients[]
+  const cases = [
+    ["1 lb chicken breast",    { qty: "1 lb",   name: "chicken breast" }],
+    ["2 cups cooked rice",     { qty: "2 cups", name: "cooked rice" }],
+    ["3 large eggs",           { qty: "3 large",name: "eggs" }],
+    ["200g salmon fillet",     { qty: "200g",   name: "salmon fillet" }],
+    ["1/2 cup Greek yogurt",   { qty: "1/2 cup",name: "greek yogurt" }],
+    ["salt and pepper to taste",{ qty: "",      name: "salt and pepper to taste" }],
+  ];
+  for (const [input, expected] of cases) {
+    const result = parseIngredientInput(input);
+    assert.equal(result.name, expected.name, `name for '${input}'`);
+    assert.equal(result.qty, expected.qty,   `qty for '${input}'`);
+  }
+});
