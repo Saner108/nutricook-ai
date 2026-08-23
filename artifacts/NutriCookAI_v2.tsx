@@ -158,12 +158,53 @@ const GROCERY = {
 };
 
 const INGREDIENT_DB = [
-  "chicken", "chicken breast", "chicken thighs", "ground beef", "ground turkey", "steak", "salmon", "tuna", "shrimp", "cod", "tilapia", "pork chops", "bacon", "ham", "turkey", "tofu", "tempeh", "eggs", "egg whites",
-  "greek yogurt", "cottage cheese", "cheddar cheese", "mozzarella", "parmesan", "feta", "milk", "almond milk", "oat milk", "butter", "cream cheese", "sour cream",
-  "broccoli", "spinach", "kale", "bell peppers", "onion", "red onion", "garlic", "tomatoes", "cherry tomatoes", "carrots", "celery", "zucchini", "mushrooms", "asparagus", "green beans", "cauliflower", "sweet potato", "potatoes", "corn", "peas", "cucumber", "lettuce", "cabbage", "brussels sprouts", "eggplant", "avocado", "jalapeño", "ginger", "cilantro", "basil", "parsley", "green onions",
-  "rice", "brown rice", "jasmine rice", "quinoa", "oats", "pasta", "whole wheat pasta", "bread", "whole wheat bread", "tortillas", "couscous", "black beans", "chickpeas", "lentils", "kidney beans", "pinto beans",
-  "banana", "apple", "berries", "strawberries", "blueberries", "raspberries", "lemon", "lime", "orange", "mango", "pineapple", "grapes", "peach", "watermelon",
-  "olive oil", "coconut oil", "soy sauce", "honey", "maple syrup", "peanut butter", "almond butter", "almonds", "walnuts", "cashews", "peanuts", "chia seeds", "flax seeds", "hummus", "salsa", "coconut milk", "chicken broth", "tomato sauce", "protein powder", "dark chocolate",
+  // Proteins
+  "chicken", "chicken breast", "chicken thighs", "chicken tenderloin", "ground chicken",
+  "ground beef", "ground turkey", "steak", "flank steak", "beef", "lamb",
+  "salmon", "salmon fillet", "tuna", "canned tuna", "shrimp", "cod", "tilapia", "sardines",
+  "pork chops", "bacon", "ham", "turkey", "sausage",
+  "tofu", "tempeh", "edamame", "seitan",
+  "eggs", "egg whites",
+  // Dairy
+  "greek yogurt", "plain yogurt", "cottage cheese",
+  "cheddar cheese", "mozzarella", "parmesan", "feta", "ricotta", "gouda",
+  "milk", "almond milk", "oat milk", "heavy cream",
+  "butter", "ghee", "cream cheese", "sour cream",
+  // Vegetables
+  "broccoli", "broccolini", "spinach", "kale", "arugula", "lettuce", "cabbage", "bok choy",
+  "bell peppers", "onion", "red onion", "green onions", "leek", "garlic", "ginger",
+  "tomatoes", "cherry tomatoes", "sun-dried tomatoes",
+  "carrots", "celery", "cucumber", "zucchini", "eggplant",
+  "mushrooms", "asparagus", "green beans", "snap peas", "peas", "corn",
+  "cauliflower", "brussels sprouts", "artichoke", "radishes",
+  "sweet potato", "potatoes", "butternut squash", "acorn squash",
+  "avocado", "jalapeño", "olives",
+  "cilantro", "basil", "parsley",
+  // Grains & Legumes
+  "rice", "white rice", "brown rice", "jasmine rice", "basmati rice",
+  "quinoa", "oats", "farro", "barley", "couscous",
+  "pasta", "whole wheat pasta", "noodles",
+  "bread", "whole wheat bread", "sourdough bread", "rye bread", "pita bread", "naan", "tortillas",
+  "flour", "almond flour", "breadcrumbs", "panko",
+  "black beans", "chickpeas", "lentils", "kidney beans", "pinto beans", "white beans", "navy beans",
+  // Fruits
+  "banana", "apple", "berries", "strawberries", "blueberries", "raspberries",
+  "lemon", "lime", "orange", "mango", "pineapple", "grapes", "peach",
+  "kiwi", "cherry", "dates", "raisins", "dried cranberries",
+  "watermelon",
+  // Pantry & Sauces
+  "olive oil", "coconut oil", "sesame oil", "vegetable oil",
+  "soy sauce", "fish sauce", "oyster sauce", "hoisin sauce", "worcestershire sauce",
+  "sriracha", "hot sauce", "pesto", "salsa", "hummus",
+  "honey", "maple syrup", "brown sugar",
+  "peanut butter", "almond butter", "tahini",
+  "almonds", "walnuts", "cashews", "peanuts", "chia seeds", "flax seeds",
+  "coconut milk", "heavy cream",
+  "chicken broth", "beef broth", "vegetable broth",
+  "tomato sauce", "tomato paste", "canned tomatoes", "diced tomatoes",
+  "balsamic vinegar", "apple cider vinegar", "dijon mustard",
+  "miso paste", "nutritional yeast",
+  "protein powder", "dark chocolate", "cornstarch",
 ];
 
 const DIETARY_OPTS = ["Vegan","Vegetarian","Gluten-Free","Dairy-Free","Keto","Low-Carb","High-Protein","Nut-Free"];
@@ -1100,6 +1141,7 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
   const [ingredients, setIngredients] = useState([]); // [{name: string, qty: string}]
   const [inputVal, setInputVal] = useState("");
   const [goal, setGoal] = useState("Muscle Gain");
+  const [servings, setServings] = useState(2); // how many portions the ingredients make
   const [loading, setLoading] = useState(false);
   const [recipes, setRecipes] = useState([]);
   const [streamName, setStreamName] = useState(null);
@@ -1167,10 +1209,11 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
     const prefStr = prefs.length ? `Dietary requirements (strictly follow): ${prefs.join(", ")}.` : "";
     const prompt = `You are a professional nutritionist and chef. Generate exactly 3 different recipes using primarily: ${ingList}.
 Goal: ${goal}. ${prefStr}
-${hasQty ? "Ingredient quantities are provided — use them to calculate accurate per-serving macros." : ""}You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do NOT add major ingredients.
+${hasQty ? `Ingredient quantities listed are for ${servings} serving(s) total — divide all macros by ${servings} to get per-serving values.` : `Each recipe should make ${servings} serving(s).`}
+You may add 1-2 basic pantry staples per recipe (salt, oil, common spices). Do NOT add major ingredients.
 Respond ONLY with valid JSON — no markdown, no explanation:
-{"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":["1 lb chicken breast"],"steps":[""]}]}
-Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers; calories must equal (protein g × 4) + (carbs g × 4) + (fat g × 9) rounded to the nearest 5; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities; 3 recipes meaningfully different in cuisine or method.`;
+{"recipes":[{"name":"","difficulty":"Easy","prepTime":"","servings":${servings},"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":["1 lb chicken breast"],"steps":[""]}]}
+Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers; calories must equal (protein g × 4) + (carbs g × 4) + (fat g × 9) rounded to the nearest 5; 4-7 steps each; "ingredients" is 4-8 shopping-list items with quantities for ${servings} serving(s); 3 recipes meaningfully different in cuisine or method.`;
     setStep("results");
     try {
       const all = await streamRecipes(null, prompt, ({ complete, partialName }) => {
@@ -1346,6 +1389,27 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
               background: goal === g ? T.mintDark : T.g1, color: goal === g ? T.onAccent : T.g5, transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
             }}>{g}</button>
           ))}
+        </div>
+      </div>
+
+      {/* Servings selector */}
+      <div style={{ ...card, marginBottom: 14, padding: "14px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.g5, textTransform: "uppercase", letterSpacing: 1 }}>Servings</div>
+            <div style={{ fontSize: 11, color: T.g4, marginTop: 2 }}>Macros calculated per serving</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 0, background: T.g1, borderRadius: 14, overflow: "hidden" }}>
+            <button
+              onClick={() => setServings(s => Math.max(1, s - 1))}
+              style={{ width: 38, height: 38, border: "none", background: "transparent", cursor: "pointer", fontSize: 20, color: servings === 1 ? T.g3 : T.mintDark, fontWeight: 300, display: "flex", alignItems: "center", justifyContent: "center" }}
+            >−</button>
+            <div style={{ minWidth: 32, textAlign: "center", fontSize: 16, fontWeight: 700, color: T.black }}>{servings}</div>
+            <button
+              onClick={() => setServings(s => Math.min(8, s + 1))}
+              style={{ width: 38, height: 38, border: "none", background: "transparent", cursor: "pointer", fontSize: 20, color: servings === 8 ? T.g3 : T.mintDark, fontWeight: 300, display: "flex", alignItems: "center", justifyContent: "center" }}
+            >+</button>
+          </div>
         </div>
       </div>
 
@@ -2373,6 +2437,42 @@ function OnboardingScreen({ email, defaultName, onDone }) {
 }
 
 // ── Root: auth gate → onboarding → app; demo mode when Supabase is absent ──
+// ── Error Boundary ───────────────────────────────────────────────────────────
+// Catches any unhandled render or lifecycle throw and shows a friendly
+// recovery screen instead of a blank white page.
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", background: "#F7F6F3", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: "#FFEEEE", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, fontSize: 30 }}>⚠️</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#131311", letterSpacing: -0.5, marginBottom: 8, textAlign: "center" }}>Something went wrong</div>
+        <div style={{ fontSize: 14, color: "#8A8A8A", lineHeight: 1.6, textAlign: "center", marginBottom: 28, maxWidth: 280 }}>
+          NutriCook hit an unexpected error. Your data is safe — tap below to reload.
+        </div>
+        {this.state.error?.message && (
+          <div style={{ background: "#FFF", border: "1px solid #EDEBE6", borderRadius: 12, padding: "10px 14px", fontSize: 12, color: "#8A8A8A", fontFamily: "monospace", marginBottom: 24, maxWidth: "100%", wordBreak: "break-word", textAlign: "left" }}>
+            {this.state.error.message}
+          </div>
+        )}
+        <button
+          onClick={() => window.location.reload()}
+          style={{ background: "#1A8C5F", color: "#fff", border: "none", borderRadius: 16, padding: "14px 32px", fontSize: 16, fontWeight: 700, cursor: "pointer", letterSpacing: -0.2 }}
+        >
+          Reload app
+        </button>
+      </div>
+    );
+  }
+}
+
 export default function NutriCookApp() {
   // Demo mode: no Supabase configured → run exactly as v2.5 (session-only mock).
   if (!hasSupabase) return <MainApp boot={null} mode="demo" />;
@@ -2416,13 +2516,15 @@ export default function NutriCookApp() {
   const signOut = async () => { await supabase.auth.signOut(); setBoot(null); setPhase("auth"); };
 
   if (phase === "loading") return (
-    <Frame>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ display: "inline-flex", animation: "spin 1.4s linear infinite", color: T.mintDark }}><Icon name="sparkles" size={32} color={T.mintDark} /></span>
-      </div>
-    </Frame>
+    <ErrorBoundary>
+      <Frame>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ display: "inline-flex", animation: "spin 1.4s linear infinite", color: T.mintDark }}><Icon name="sparkles" size={32} color={T.mintDark} /></span>
+        </div>
+      </Frame>
+    </ErrorBoundary>
   );
-  if (phase === "auth") return <AuthScreen />;
-  if (phase === "onboarding") return <OnboardingScreen email={session?.user?.email} defaultName={needName} onDone={() => bootstrap(session)} />;
-  return <MainApp boot={boot} mode="live" email={session?.user?.email} onSignOut={signOut} />;
+  if (phase === "auth") return <ErrorBoundary><AuthScreen /></ErrorBoundary>;
+  if (phase === "onboarding") return <ErrorBoundary><OnboardingScreen email={session?.user?.email} defaultName={needName} onDone={() => bootstrap(session)} /></ErrorBoundary>;
+  return <ErrorBoundary><MainApp boot={boot} mode="live" email={session?.user?.email} onSignOut={signOut} /></ErrorBoundary>;
 }

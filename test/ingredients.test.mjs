@@ -138,3 +138,59 @@ test("parseIngredientInput round-trip: claude ingredient strings parse correctly
     assert.equal(result.qty, expected.qty,   `qty for '${input}'`);
   }
 });
+
+// ── Extended parseIngredientInput edge cases ──────────────────────────────────
+
+test("'1 dozen eggs' → qty='1 dozen', name='eggs'", () => {
+  const r = parseIngredientInput("1 dozen eggs");
+  assert.equal(r.qty, "1 dozen");
+  assert.equal(r.name, "eggs");
+});
+
+test("'a handful of spinach' → qty='handful', name='spinach'", () => {
+  const r = parseIngredientInput("a handful of spinach");
+  assert.equal(r.qty, "handful");
+  assert.equal(r.name, "spinach");
+});
+
+test("'a pinch of salt' → qty='pinch', name='salt'", () => {
+  const r = parseIngredientInput("a pinch of salt");
+  assert.equal(r.qty, "pinch");
+  assert.equal(r.name, "salt");
+});
+
+test("'a dash of hot sauce' → qty='dash', name='hot sauce'", () => {
+  const r = parseIngredientInput("a dash of hot sauce");
+  assert.equal(r.qty, "dash");
+  assert.equal(r.name, "hot sauce");
+});
+
+test("'2 cloves garlic' → qty='2 cloves', name='garlic'", () => {
+  const r = parseIngredientInput("2 cloves garlic");
+  assert.equal(r.qty, "2 cloves");
+  assert.equal(r.name, "garlic");
+});
+
+test("'1 sprig rosemary' → qty='1 sprig', name='rosemary'", () => {
+  const r = parseIngredientInput("1 sprig rosemary");
+  assert.equal(r.qty, "1 sprig");
+  assert.equal(r.name, "rosemary");
+});
+
+test("'1 head cauliflower' → qty='1 head', name='cauliflower'", () => {
+  const r = parseIngredientInput("1 head cauliflower");
+  assert.equal(r.qty, "1 head");
+  assert.equal(r.name, "cauliflower");
+});
+
+test("'2 stalks celery' → qty='2 stalks', name='celery'", () => {
+  const r = parseIngredientInput("2 stalks celery");
+  assert.equal(r.qty, "2 stalks");
+  assert.equal(r.name, "celery");
+});
+
+test("'salt and pepper to taste' → qty='', name='salt and pepper to taste'", () => {
+  const r = parseIngredientInput("salt and pepper to taste");
+  assert.equal(r.qty, "");
+  assert.equal(r.name, "salt and pepper to taste");
+});
