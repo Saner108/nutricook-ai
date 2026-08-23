@@ -153,3 +153,71 @@ test("getMealSteps: returns a non-empty string for any input", () => {
   const unknown = getMealSteps({ type: "Dinner", name: "Mystery Casserole XYZ123" });
   assert.ok(typeof unknown === "string" && unknown.length > 10, "fallback must return a usable string");
 });
+
+// ── sanitizeMacros ───────────────────────────────────────────────────────────
+// Loaded alongside extractRecipes so sanitizeMacros is in scope.
+
+const sanitizeMacros = loadFnWith("sanitizeMacros", []);
+
+test("sanitizeMacros: valid macros within 10% tolerance — calories preserved", () => {
+  // protein 40 * 4 + carbs 50 * 4 + fat 20 * 9 = 160+200+180 = 540 kcal
+  // stated 500 → diff = 40/500 = 8% → within 10% → keep 500
+  const r = sanitizeMacros({ calories: 500, protein: 40, carbs: 50, fat: 20 });
+  assert.equal(r.calories, 500, "within-tolerance calories should be preserved");
+  assert.equal(r.protein, 40);
+  assert.equal(r.carbs, 50);
+  assert.equal(r.fat, 20);
+});
+
+test("sanitizeMacros: calories >10% off — recalculates from macros", () => {
+  // protein 28 * 4 + carbs 42 * 4 + fat 18 * 9 = 112+168+162 = 442 kcal
+  // stated 520 → diff = 78/520 = 15% → recalculate → round(442/5)*5 = 440
+  const r = sanitizeMacros({ calories: 520, protein: 28, carbs: 42, fat: 18 });
+  assert.equal(r.calories, 440, "calories off by 15% should be recalculated");
+});
+
+test("sanitizeMacros: null input — returns all zeros", () => {
+  const r = sanitizeMacros(null);
+  assert.deepEqual(r, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+});
+
+test("sanitizeMacros: undefined input — returns all zeros", () => {
+  const r = sanitizeMacros(undefined);
+  assert.deepEqual(r, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+});
+
+test("sanitizeMacros: string values — coerces to numbers", () => {
+  const r = sanitizeMacros({ calories: "400", protein: "30", carbs: "40", fat: "10" });
+  assert.equal(r.protein, 30);
+  assert.equal(r.carbs, 40);
+  assert.equal(r.fat, 10);
+});
+
+test("sanitizeMacros: negative values — clamped to zero", () => {
+  const r = sanitizeMacros({ calories: 300, protein: -5, carbs: 40, fat: 10 });
+  assert.equal(r.protein, 0, "negative protein must be clamped to 0");
+});
+
+test("sanitizeMacros: NaN values — treated as zero", () => {
+  const r = sanitizeMacros({ calories: NaN, protein: NaN, carbs: NaN, fat: NaN });
+  assert.deepEqual(r, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+});
+
+test("sanitizeMacros: zero calories with non-zero macros — calculates from macros", () => {
+  // stated 0, macros give: 30*4 + 40*4 + 10*9 = 120+160+90 = 370 → round to 370
+  const r = sanitizeMacros({ calories: 0, protein: 30, carbs: 40, fat: 10 });
+  assert.equal(r.calories, 370, "zero stated calories should compute from macros");
+});
+
+test("sanitizeMacros: exact 10% boundary — calories preserved (not over)", () => {
+  // protein 0 + carbs 100*4 + fat 0 = 400. stated 440 → diff 40/440 = 9.09% < 10%
+  const r = sanitizeMacros({ calories: 440, protein: 0, carbs: 100, fat: 0 });
+  assert.equal(r.calories, 440, "exactly within 10% tolerance should be preserved");
+});
+
+test("sanitizeMacros: fractional values — rounded to integers", () => {
+  const r = sanitizeMacros({ calories: 500, protein: 30.7, carbs: 50.3, fat: 15.9 });
+  assert.equal(r.protein, 31);
+  assert.equal(r.carbs, 50);
+  assert.equal(r.fat, 16);
+});
