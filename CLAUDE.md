@@ -11,6 +11,7 @@ AI-powered meal planning app. Target users: fitness-minded individuals managing 
 
 ## Key Files
 - `artifacts/NutriCookAI_v2.tsx` — full UI, all screens and components
+- `src/lib/ingredients.js` — `parseIngredientInput(raw)` + `ingLabel({qty,name})`: quantity parser shared between AIScreen and tests; handles oz/g/kg/lb/cup/tbsp/dozen/handful/pinch/clove/sprig
 - `api/generate.js` — Anthropic proxy: auth + quota gate + SSE streaming
 - `src/lib/quota.js` — shared quota/streak logic (used by both UI and API)
 - `src/lib/db.js` — Supabase data layer
