@@ -31,6 +31,14 @@ export default async function handler(req, res) {
     res.status(200).json({ simulated: true });
     return;
   }
+  // Catch common misconfiguration early — a price ID must start with "price_".
+  // Passing a wrong value (e.g. a product ID "prod_..." or an old plan ID)
+  // would otherwise surface as a cryptic Stripe 404 with no context.
+  if (!price.startsWith("price_")) {
+    console.error("[checkout] STRIPE_PRICE_ID looks wrong — expected 'price_...', got:", price.slice(0, 12));
+    res.status(500).json({ error: { message: "Stripe is not configured correctly — contact support." } });
+    return;
+  }
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host;
   const origin = `${proto}://${host}`;

@@ -71,10 +71,10 @@ export default async function handler(req, res) {
       res.status(401).json({ error: { message: "Sign in required" } });
       return;
     }
-    // Short-window abuse guard (requests/minute), checked before the daily
-    // quota so a rapid-fire loop gets stopped cheaply rather than burning
-    // through consume_quota's transaction on every hit.
-    const withinRateLimit = await rpc("check_rate_limit", { p_user: user.id, p_limit: 20 });
+    // Short-window abuse guard. p_limit is env-configurable so it can be
+    // tuned without a code deploy. Falls back to 20 req/min if unset.
+    const rateLimit = Math.max(1, parseInt(process.env.RATE_LIMIT_PER_MINUTE || "20", 10));
+    const withinRateLimit = await rpc("check_rate_limit", { p_user: user.id, p_limit: rateLimit });
     if (withinRateLimit === false) {
       res.status(429).json({ error: { code: "rate_limited", message: "Too many requests — please slow down." } });
       return;
@@ -92,10 +92,19 @@ export default async function handler(req, res) {
     // error); fail open on metering rather than blocking a valid/paying user.
   }
 
+  // AbortController gives us a clean 25-second deadline on the Anthropic
+  // request. Without this, a hung or slow upstream holds the Vercel function
+  // open until the platform kills it at 30s — no cleanup, no error response.
+  // 25s gives 5s of headroom before the platform timeout so we can still
+  // send a proper 504 to the client.
+  const abort = new AbortController();
+  const timeoutId = setTimeout(() => abort.abort(), 25_000);
+
   let upstream;
   try {
     upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: abort.signal,
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -103,10 +112,16 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({ model, max_tokens, messages, ...(stream === true ? { stream: true } : {}) }),
     });
-  } catch {
-    res.status(502).json({ error: { message: "Upstream request to Anthropic failed" } });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      res.status(504).json({ error: { message: "Recipe generation timed out — please try again." } });
+    } else {
+      res.status(502).json({ error: { message: "Upstream request to Anthropic failed" } });
+    }
     return;
   }
+  clearTimeout(timeoutId);
 
   if (stream === true && upstream.ok && upstream.body) {
     res.statusCode = 200;

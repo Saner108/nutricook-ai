@@ -195,3 +195,41 @@ test("generate.js: validates messages is a non-empty array before hitting Anthro
   assert.match(src, /Array\.isArray\(messages\)/, "messages must be validated with Array.isArray");
   assert.match(src, /messages\.length === 0/, "generate.js must reject empty messages array");
 });
+
+// ── generate.js health checks (source-level) ─────────────────────────────────
+
+const genSrc = readFileSync(
+  fileURLToPath(new URL("../api/generate.js", import.meta.url)), "utf8"
+);
+
+test("generate.js: uses AbortController with 25s timeout on upstream fetch", () => {
+  assert.match(genSrc, /AbortController/, "must create AbortController");
+  assert.match(genSrc, /25[_,]?000|25000/, "must set 25 second timeout");
+  assert.match(genSrc, /abort\.signal/, "must pass signal to fetch");
+  assert.match(genSrc, /AbortError/, "must handle AbortError with 504 response");
+});
+
+test("generate.js: clears timeout on both success and error paths", () => {
+  assert.match(genSrc, /clearTimeout\(timeoutId\)/, "must clear timeout after fetch resolves");
+});
+
+test("generate.js: rate limit reads from RATE_LIMIT_PER_MINUTE env var", () => {
+  assert.match(genSrc, /RATE_LIMIT_PER_MINUTE/, "must read rate limit from env var");
+  assert.match(genSrc, /parseInt.*RATE_LIMIT_PER_MINUTE/, "must parse the env var as integer");
+});
+
+// ── checkout.js health checks (source-level) ─────────────────────────────────
+
+const checkoutSrc = readFileSync(
+  fileURLToPath(new URL("../api/checkout.js", import.meta.url)), "utf8"
+);
+
+test("checkout.js: validates STRIPE_PRICE_ID starts with 'price_'", () => {
+  assert.match(checkoutSrc, /price_/, "must check price ID format");
+  assert.match(checkoutSrc, /startsWith/, "must use startsWith for format check");
+});
+
+test("checkout.js: returns 500 with user-friendly message on bad price ID format", () => {
+  assert.match(checkoutSrc, /500/, "must return 500 on bad price ID");
+  assert.match(checkoutSrc, /not configured correctly/, "must give clear error message");
+});

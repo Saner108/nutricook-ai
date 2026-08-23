@@ -38,9 +38,9 @@ Unknown model strings silently fall back to `claude-sonnet-4-6`.
 
 ## Commands
 ```bash
-npm run dev       # dev server at localhost:5173
-npm run build     # production build
-node test/run.mjs # full test suite
+npm run dev       # dev server at localhost:5173 (mocks Anthropic if no API key set)
+npm run build     # production build — 3 chunks: index.js + vendor.js + supabase.js
+node test/run.mjs # full test suite (96 tests)
 ```
 
 ## Sub-agents (.claude/agents/)
