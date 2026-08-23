@@ -43,6 +43,16 @@ export default async function handler(req, res) {
     res.status(400).json({ error: { message: "messages must be a non-empty array" } });
     return;
   }
+  // Validate individual message shape — Anthropic requires each message to have
+  // a `role` string and a `content` field. A message like [null] or [{}] passes
+  // the array check above but would return a cryptic 400 from Anthropic.
+  const badMessage = messages.find(
+    m => !m || typeof m !== "object" || !m.role || m.content === undefined
+  );
+  if (badMessage) {
+    res.status(400).json({ error: { message: "each message must have a role and content field" } });
+    return;
+  }
 
   // Cap max_tokens server-side — the client value is advisory, not trusted.
   // Recipe generation needs ~1500, remix ~1200, scan ~300. A crafted request

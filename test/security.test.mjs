@@ -275,3 +275,40 @@ test("INGREDIENT_DB: no duplicate entries", () => {
   });
   assert.deepEqual(dups, [], `Duplicate ingredients found: ${dups.join(", ")}`);
 });
+
+// ── generate.js message structure validation ──────────────────────────────────
+
+test("generate.js: rejects message array containing null", () => {
+  assert.match(
+    genSrc,
+    /badMessage.*find|find.*badMessage/s,
+    "generate.js must check individual message objects, not just the array"
+  );
+});
+
+test("generate.js: validates each message has role and content", () => {
+  assert.match(genSrc, /m\.role/, "each message must be checked for .role");
+  assert.match(genSrc, /m\.content === undefined/, "each message must be checked for .content");
+});
+
+// ── stripe-webhook: invoice.payment_failed handler ───────────────────────────
+
+const webhookSrc = readFileSync(
+  fileURLToPath(new URL("../api/stripe-webhook.js", import.meta.url)), "utf8"
+);
+
+test("stripe-webhook: handles invoice.payment_failed event", () => {
+  assert.match(
+    webhookSrc,
+    /invoice\.payment_failed/,
+    "stripe-webhook must handle invoice.payment_failed to mark subscriptions past_due"
+  );
+});
+
+test("stripe-webhook: invoice.payment_failed sets status to past_due", () => {
+  const invoiceBlock = webhookSrc.slice(
+    webhookSrc.indexOf("invoice.payment_failed"),
+    webhookSrc.indexOf("invoice.payment_failed") + 400
+  );
+  assert.match(invoiceBlock, /past_due/, "payment_failed handler must set status to past_due");
+});

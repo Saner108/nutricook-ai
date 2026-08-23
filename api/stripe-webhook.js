@@ -89,6 +89,18 @@ export default async function handler(req, res) {
         current_period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
       });
       break;
+    case "invoice.payment_failed":
+      // A renewal payment failed. Stripe will retry, but we mark the subscription
+      // past_due immediately so the app can gate pro features without waiting for
+      // customer.subscription.updated (which fires after Stripe retries are exhausted).
+      // The customer ID on invoice events is obj.customer; subscription is obj.subscription.
+      await persist({
+        user_id: userId,
+        stripe_customer_id: obj.customer || null,
+        stripe_subscription_id: obj.subscription || null,
+        status: "past_due",
+      });
+      break;
     default:
       break;
   }
