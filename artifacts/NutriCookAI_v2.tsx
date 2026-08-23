@@ -170,7 +170,6 @@ const INGREDIENT_DB = [
   "cheddar cheese", "mozzarella", "parmesan", "feta", "ricotta", "gouda",
   "milk", "almond milk", "oat milk", "heavy cream",
   "butter", "ghee", "cream cheese", "sour cream",
-  // Vegetables
   "broccoli", "broccolini", "spinach", "kale", "arugula", "lettuce", "cabbage", "bok choy",
   "bell peppers", "onion", "red onion", "green onions", "leek", "garlic", "ginger",
   "tomatoes", "cherry tomatoes", "sun-dried tomatoes",
@@ -199,7 +198,7 @@ const INGREDIENT_DB = [
   "honey", "maple syrup", "brown sugar",
   "peanut butter", "almond butter", "tahini",
   "almonds", "walnuts", "cashews", "peanuts", "chia seeds", "flax seeds",
-  "coconut milk", "heavy cream",
+  "coconut milk",
   "chicken broth", "beef broth", "vegetable broth",
   "tomato sauce", "tomato paste", "canned tomatoes", "diced tomatoes",
   "balsamic vinegar", "apple cider vinegar", "dijon mustard",

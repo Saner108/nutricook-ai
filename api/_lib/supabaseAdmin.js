@@ -7,9 +7,21 @@ const URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANON = process.env.SUPABASE_ANON_KEY;
 
-// Supabase is "on" only when both a URL and the service-role key are present.
-// When off, callers fall back to the pre-auth (demo) behavior.
 export const supabaseConfigured = Boolean(URL && SERVICE);
+
+// Internal: fetch with a hard timeout so a hung Supabase connection can't hold
+// a Vercel serverless function open until the platform kills it at 30s.
+// 10s is generous for a Supabase REST call and leaves headroom for retries.
+const SUPABASE_TIMEOUT_MS = 10_000;
+async function fetchWithTimeout(url, options = {}) {
+  const ac = new AbortController();
+  const id = setTimeout(() => ac.abort(), SUPABASE_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: ac.signal });
+  } finally {
+    clearTimeout(id); // always clear — whether success, error, or AbortError
+  }
+}
 
 // Verify a user access token and return the auth user ({ id, email }) or null.
 //
@@ -34,7 +46,7 @@ export async function getUser(accessToken, { allowLocal = true } = {}) {
     // the network path is the source of truth either way.
   }
   try {
-    const r = await fetch(`${URL}/auth/v1/user`, {
+    const r = await fetchWithTimeout(`${URL}/auth/v1/user`, {
       headers: { apikey: ANON || SERVICE, Authorization: `Bearer ${accessToken}` },
     });
     if (!r.ok) return null;
@@ -64,7 +76,7 @@ export async function getUserByEmail(email) {
   try {
     // Hard page cap so a misbehaving/ignored pagination param can't loop forever.
     for (let page = 1; page <= 50; page++) {
-      const r = await fetch(`${URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, {
+      const r = await fetchWithTimeout(`${URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, {
         headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
       });
       if (!r.ok) return null;
@@ -91,7 +103,7 @@ export function bearer(req) {
 export async function rpc(fn, args) {
   if (!supabaseConfigured) return null;
   try {
-    const r = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/rpc/${fn}`, {
       method: "POST",
       headers: {
         apikey: SERVICE,
@@ -112,7 +124,7 @@ export async function rpc(fn, args) {
 export async function upsert(table, rows) {
   if (!supabaseConfigured) return false;
   try {
-    const r = await fetch(`${URL}/rest/v1/${table}`, {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/${table}`, {
       method: "POST",
       headers: {
         apikey: SERVICE,
@@ -138,7 +150,7 @@ export async function upsert(table, rows) {
 export async function insertRow(table, row) {
   if (!supabaseConfigured) return false;
   try {
-    const r = await fetch(`${URL}/rest/v1/${table}`, {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/${table}`, {
       method: "POST",
       headers: {
         apikey: SERVICE,
@@ -159,7 +171,7 @@ export async function selectOne(table, match, columns = "*") {
   if (!supabaseConfigured) return null;
   const qs = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join("&");
   try {
-    const r = await fetch(`${URL}/rest/v1/${table}?${qs}&select=${columns}&limit=1`, {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/${table}?${qs}&select=${columns}&limit=1`, {
       headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
     });
     if (!r.ok) return null;

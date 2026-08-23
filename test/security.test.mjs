@@ -233,3 +233,45 @@ test("checkout.js: returns 500 with user-friendly message on bad price ID format
   assert.match(checkoutSrc, /500/, "must return 500 on bad price ID");
   assert.match(checkoutSrc, /not configured correctly/, "must give clear error message");
 });
+
+// ── supabaseAdmin.js timeout protection (source-level) ───────────────────────
+
+const adminSrc = readFileSync(
+  fileURLToPath(new URL("../api/_lib/supabaseAdmin.js", import.meta.url)), "utf8"
+);
+
+test("supabaseAdmin: fetchWithTimeout helper exists with 10s deadline", () => {
+  assert.match(adminSrc, /fetchWithTimeout/, "fetchWithTimeout helper must exist");
+  assert.match(adminSrc, /10[_,]?000|10000/, "timeout must be 10 seconds");
+  assert.match(adminSrc, /AbortController/, "must use AbortController");
+  assert.match(adminSrc, /clearTimeout/, "must clear timeout in finally block");
+});
+
+test("supabaseAdmin: all Supabase fetches use fetchWithTimeout (not bare fetch)", () => {
+  // Count occurrences — bare `await fetch(\`\${URL}` should be zero after replacement
+  const bareCount = (adminSrc.match(/await fetch\(`\$\{URL\}/g) || []).length;
+  assert.equal(bareCount, 0, `Found ${bareCount} bare fetch() calls — all must use fetchWithTimeout`);
+});
+
+test("supabaseAdmin: timeout cleared in finally block (no leak on error)", () => {
+  assert.match(adminSrc, /finally\s*\{[\s\S]*?clearTimeout/, "clearTimeout must be in a finally block");
+});
+
+// ── INGREDIENT_DB: no duplicates ─────────────────────────────────────────────
+
+const appSrc = readFileSync(
+  fileURLToPath(new URL("../artifacts/NutriCookAI_v2.tsx", import.meta.url)), "utf8"
+);
+
+test("INGREDIENT_DB: no duplicate entries", () => {
+  const match = appSrc.match(/const INGREDIENT_DB = \[[\s\S]*?\];/);
+  assert.ok(match, "INGREDIENT_DB must exist");
+  const items = (match[0].match(/"([^"]+)"/g) || []).map(s => s.slice(1, -1));
+  const seen = {};
+  const dups = [];
+  items.forEach(i => {
+    seen[i] = (seen[i] || 0) + 1;
+    if (seen[i] === 2) dups.push(i);
+  });
+  assert.deepEqual(dups, [], `Duplicate ingredients found: ${dups.join(", ")}`);
+});
