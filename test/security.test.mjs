@@ -312,3 +312,22 @@ test("stripe-webhook: invoice.payment_failed sets status to past_due", () => {
   );
   assert.match(invoiceBlock, /past_due/, "payment_failed handler must set status to past_due");
 });
+
+// ── generate.js: message count + content size caps ───────────────────────────
+
+test("generate.js: MAX_MESSAGES constant caps message array length", () => {
+  assert.match(genSrc, /MAX_MESSAGES/, "MAX_MESSAGES constant must exist");
+  assert.match(genSrc, /messages\.length > MAX_MESSAGES/, "must reject too many messages");
+});
+
+test("generate.js: MAX_CONTENT_CHARS constant caps total payload size", () => {
+  assert.match(genSrc, /MAX_CONTENT_CHARS/, "MAX_CONTENT_CHARS constant must exist");
+  assert.match(genSrc, /totalChars > MAX_CONTENT_CHARS/, "must reject oversized content");
+});
+
+test("generate.js: content size check handles both string and array content blocks", () => {
+  // The check must handle m.content as a string (text messages) and
+  // as an array of blocks (vision messages with image + text blocks)
+  assert.match(genSrc, /typeof m\.content === "string"/, "must handle string content");
+  assert.match(genSrc, /Array\.isArray\(m\.content\)/, "must handle array content blocks");
+});

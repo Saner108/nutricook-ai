@@ -54,6 +54,33 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Hard caps on message count and total content size to prevent input-token
+  // abuse. max_tokens guards output; without these, a crafted request with
+  // hundreds of messages or megabytes of text content would pass straight
+  // through to Anthropic and incur large input costs.
+  const MAX_MESSAGES = 12;           // generous for multi-turn but blocks bulk stuffing
+  const MAX_CONTENT_CHARS = 60_000;  // ~15K tokens — covers any real recipe gen flow
+
+  if (messages.length > MAX_MESSAGES) {
+    res.status(400).json({ error: { message: `Too many messages — max ${MAX_MESSAGES}` } });
+    return;
+  }
+
+  const totalChars = messages.reduce((sum, m) => {
+    if (typeof m.content === "string") return sum + m.content.length;
+    if (Array.isArray(m.content)) {
+      return sum + m.content.reduce(
+        (s, block) => s + (typeof block?.text === "string" ? block.text.length : 0), 0
+      );
+    }
+    return sum;
+  }, 0);
+
+  if (totalChars > MAX_CONTENT_CHARS) {
+    res.status(400).json({ error: { message: "Message content too large" } });
+    return;
+  }
+
   // Cap max_tokens server-side — the client value is advisory, not trusted.
   // Recipe generation needs ~1500, remix ~1200, scan ~300. A crafted request
   // could otherwise claim max_tokens: 100000 and burn the entire API budget.
