@@ -61,7 +61,7 @@ export default async function handler(req, res) {
 
   switch (event.type) {
     case "checkout.session.completed":
-      console.log("[stripe] subscription started:", obj.customer_email || obj.customer);
+      console.log("[stripe] subscription started — customer:", obj.customer);
       await persist({
         user_id: userId,
         stripe_customer_id: obj.customer || null,
