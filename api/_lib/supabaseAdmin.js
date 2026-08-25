@@ -26,7 +26,16 @@ export async function getUser(accessToken) {
 }
 
 // Look up an auth user by email with the service role (GoTrue Admin API).
-// Returns { id, email } or null.
+//
+// Return contract — the two failure modes are NOT the same thing and callers
+// must not conflate them:
+//   - null:      every page was scanned successfully and no match was found.
+//                A genuine "no such user".
+//   - undefined: the lookup itself could not be completed (a fetch threw, a
+//                page came back !r.ok, or the response body wasn't in either
+//                shape GoTrue is known to return). This says nothing about
+//                whether the user exists — the question was never answered.
+//   - {id,email}: a verified match.
 //
 // The `?filter=` / `?email=` query params are deliberately NOT relied on: what
 // they do varies by GoTrue version — some treat it as an exact match, some as a
@@ -37,9 +46,9 @@ export async function getUser(accessToken) {
 // page through the list client-side so the lookup behaves the same on every
 // version. Paging the whole user list is fine at this project's size.
 export async function getUserByEmail(email) {
-  if (!supabaseConfigured || !email) return null;
+  if (!supabaseConfigured || !email) return undefined;
   const wanted = String(email).trim().toLowerCase();
-  if (!wanted) return null;
+  if (!wanted) return undefined;
   const perPage = 200;
   try {
     // Hard page cap so a misbehaving/ignored pagination param can't loop forever.
@@ -47,17 +56,20 @@ export async function getUserByEmail(email) {
       const r = await fetch(`${URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, {
         headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
       });
-      if (!r.ok) return null;
+      if (!r.ok) return undefined;
       const body = await r.json();
-      const users = Array.isArray(body) ? body : Array.isArray(body?.users) ? body.users : [];
-      if (!users.length) return null;
+      let users;
+      if (Array.isArray(body)) users = body;
+      else if (Array.isArray(body?.users)) users = body.users;
+      else return undefined;   // unexpected response shape — lookup not completed
+      if (!users.length) return null;   // empty page, successfully scanned: no match
       const hit = users.find(u => typeof u?.email === "string" && u.email.trim().toLowerCase() === wanted);
       if (hit && hit.id) return { id: hit.id, email: hit.email };
       if (users.length < perPage) return null;   // last page, no match
     }
-    return null;
+    return null;   // hard page cap reached with no match found on any scanned page
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -88,8 +100,14 @@ export async function rpc(fn, args) {
   }
 }
 
-// Upsert rows into a table with the service role (merge on the primary key).
-export async function upsert(table, rows) {
+// Internal: shared fetch/headers/error-handling for both write helpers below.
+// The only thing that differs between upsert() and insertRow() is whether
+// Postgres is told to merge-duplicate on conflict — everything else (method,
+// auth headers, array-wrapping the body, swallowing fetch errors into `false`)
+// is identical, so it lives here once. Not exported: callers use upsert() /
+// insertRow() so the "why" for each stays attached to a named function instead
+// of a boolean flag at the call site.
+async function writeRows(table, rows, { merge } = {}) {
   if (!supabaseConfigured) return false;
   try {
     const r = await fetch(`${URL}/rest/v1/${table}`, {
@@ -98,7 +116,7 @@ export async function upsert(table, rows) {
         apikey: SERVICE,
         Authorization: `Bearer ${SERVICE}`,
         "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=minimal",
+        Prefer: merge ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
       },
       body: JSON.stringify(Array.isArray(rows) ? rows : [rows]),
     });
@@ -106,6 +124,11 @@ export async function upsert(table, rows) {
   } catch {
     return false;
   }
+}
+
+// Upsert rows into a table with the service role (merge on the primary key).
+export async function upsert(table, rows) {
+  return writeRows(table, rows, { merge: true });
 }
 
 // Plain insert of one row with the service role. Returns true on success.
@@ -116,22 +139,7 @@ export async function upsert(table, rows) {
 // This sends `return=minimal` only, so a duplicate is a failed insert (false)
 // rather than a silent replacement.
 export async function insertRow(table, row) {
-  if (!supabaseConfigured) return false;
-  try {
-    const r = await fetch(`${URL}/rest/v1/${table}`, {
-      method: "POST",
-      headers: {
-        apikey: SERVICE,
-        Authorization: `Bearer ${SERVICE}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(Array.isArray(row) ? row : [row]),
-    });
-    return r.ok;
-  } catch {
-    return false;
-  }
+  return writeRows(table, row, { merge: false });
 }
 
 // Read a single row's columns via PostgREST with the service role.

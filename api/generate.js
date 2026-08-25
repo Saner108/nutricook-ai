@@ -53,7 +53,12 @@ export default async function handler(req, res) {
     }
     // withinRateLimit === null means the check itself failed (e.g. transient
     // DB error, or migration_ratelimit.sql not yet run); fail open here too,
-    // same policy as the quota check below.
+    // same policy as the quota check below. Logged so a rate limiter that has
+    // silently never worked in production doesn't look identical to one that's
+    // actually enforcing anything — mirrors the console.error in _logAction.js.
+    if (withinRateLimit === null) {
+      console.warn("check_rate_limit RPC failed — failing open (no rate limit enforced) for user", user.id);
+    }
     const kind = isScanRequest(messages) ? "scan" : "gen";
     const allowed = await rpc("consume_quota", { p_user: user.id, p_kind: kind });
     if (allowed === false) {
@@ -62,6 +67,10 @@ export default async function handler(req, res) {
     }
     // allowed === null means the quota check itself failed (e.g. transient DB
     // error); fail open on metering rather than blocking a valid/paying user.
+    // Logged for the same reason as the rate-limit branch above.
+    if (allowed === null) {
+      console.warn("consume_quota RPC failed — failing open (no quota enforced) for user", user.id);
+    }
   }
 
   let upstream;

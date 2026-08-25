@@ -19,6 +19,13 @@ alter table rate_limit_hits enable row level security;
 -- No client policies: this table is written/read only by the serverless
 -- service-role key, same as usage_counters' write path.
 
+-- ── Defense in depth ──────────────────────────────────────────────────────
+-- RLS with no policies already denies everything, so this is belt-and-braces:
+-- it keeps the table closed even if RLS is ever accidentally disabled on it
+-- (a migration, a console click, a restore). service_role is unaffected — it
+-- carries BYPASSRLS and is not a member of anon/authenticated.
+revoke all on table rate_limit_hits from anon, authenticated;
+
 -- ── Function ──────────────────────────────────────────────────────────────
 -- Buckets requests into fixed 60-second windows per user. Returns true if
 -- the request is allowed (and was counted), false if the caller has already

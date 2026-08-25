@@ -358,7 +358,7 @@ function AICard({ recipe, index, onSave, onReplace }) {
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           model: "claude-sonnet-4-6", max_tokens: 1200,
           messages: [{ role: "user", content: `Remix this recipe: ${JSON.stringify(recipe)}. Instruction: ${instruction}. Keep it realistic and adjust macros accordingly. Respond ONLY with valid JSON of the exact same schema (single recipe object, no wrapper): {"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[""],"steps":[""]}` }],
@@ -516,8 +516,18 @@ async function readSSEText(reader, onText) {
   return acc;
 }
 
+// Every /api/generate call must be authenticated in live mode — the route
+// 401s without it, and the rate-limit/quota gates behind that check never run
+// otherwise. Returns {} in demo mode (no Supabase configured / no session),
+// matching startCheckout's existing pattern for /api/checkout.
+async function authHeaders() {
+  if (!hasSupabase) return {};
+  const { data } = await supabase.auth.getSession();
+  return data?.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+}
+
 async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
-  const doFetch = fetchFn || ((u, o) => fetch(u, o));
+  const doFetch = fetchFn || (async (u, o) => fetch(u, { ...o, headers: { ...o.headers, ...(await authHeaders()) } }));
   const res = await doFetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1013,18 +1023,27 @@ function downscaleImageToBase64(file, { maxDim = 1024, quality = 0.72 } = {}) {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.max(1, Math.round(img.width * scale));
-      const h = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", quality);
-      const base64 = dataUrl.split(",")[1];
-      if (!base64) { reject(new Error("Couldn't process that photo.")); return; }
-      resolve(base64);
+      // onload runs as its own event-loop callback, not inside this executor's
+      // call stack — a throw here (e.g. getContext returning null under memory
+      // pressure) would otherwise be an uncaught error that never settles the
+      // promise, leaving the caller awaiting forever. Catch and reject instead.
+      try {
+        URL.revokeObjectURL(objectUrl);
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas unavailable");
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) throw new Error("Couldn't process that photo.");
+        resolve(base64);
+      } catch {
+        reject(new Error("Couldn't process that photo — try another one."));
+      }
     };
     img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Couldn't read that photo — try another one.")); };
     img.src = objectUrl;
@@ -1107,15 +1126,20 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic per-serving integers
     e.target.value = "";
     if (!file) return;
     if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; }
+    // 12MB, not 4MB: downscaleImageToBase64 exists specifically to shrink large
+    // phone photos, so the raw-file cap only needs to bound decode memory, not
+    // match the size the old (pre-downscale) upload path could tolerate.
+    if (file.size > 12 * 1024 * 1024) { setError("That photo is too large — try a smaller or compressed one."); return; }
+    // Quota is consumed only once the request is actually going to be issued —
+    // an oversized file that never leaves the browser must not cost a scan.
     useQuota("scan");
-    if (file.size > 4 * 1024 * 1024) { setError("That photo is over 4MB — try a smaller or compressed one."); return; }
     setScanning(true); setError(null);
     (async () => {
       try {
         const base64 = await downscaleImageToBase64(file, { maxDim: 1024, quality: 0.72 });
         const res = await fetch("/api/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
           body: JSON.stringify({
             model: "claude-sonnet-4-6", max_tokens: 300,
             messages: [{ role: "user", content: [
@@ -2071,6 +2095,7 @@ function AuthScreen() {
       }
       setFailCount(0);
     } catch (e) {
+      let lockedMsg = null;
       if (mode === "signin") {
         // Only sign-in failures count toward lockout — signup validation
         // errors (e.g. weak password, duplicate email) aren't login attempts.
@@ -2079,9 +2104,12 @@ function AuthScreen() {
         if (nextFail >= 5) {
           const cooldownMs = Math.min(60000, 2000 * Math.pow(2, nextFail - 5)); // 2s, 4s, 8s... capped at 60s
           setLockedUntil(Date.now() + cooldownMs);
+          // Otherwise the raw provider error below overwrites this, and the
+          // user only learns they're locked out on their *next* attempt.
+          lockedMsg = `Too many attempts — try again in ${Math.ceil(cooldownMs / 1000)}s.`;
         }
       }
-      setErr(e?.message || "Something went wrong — try again.");
+      setErr(lockedMsg || e?.message || "Something went wrong — try again.");
     } finally {
       setBusy(false);
     }
@@ -2150,7 +2178,7 @@ const GOAL_TARGETS = {
   "Low Carb": { kcal: 1900, protein: 160, carbs: 110, fat: 90 },
   "Balanced": { kcal: 2000, protein: 130, carbs: 210, fat: 67 },
 };
-function OnboardingScreen({ email, defaultName, onDone }) {
+function OnboardingScreen({ email, uid, defaultName, onDone }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(defaultName || "");
   const [goal, setGoal] = useState("Muscle Gain");
@@ -2169,17 +2197,21 @@ function OnboardingScreen({ email, defaultName, onDone }) {
     const wLbs = toLbs(weight);
     const tLbs = toLbs(target);
     try {
-      // profiles and (grocery_items + weight_logs) are independent writes,
-      // so they run in parallel instead of waiting on each other.
-      await Promise.all([
-        db.updateProfile({
-          name: name.trim() || "there", goal, units,
-          weight_lbs: wLbs, target_lbs: tLbs,
-          kcal_target: t.kcal, protein_target: t.protein, carbs_target: t.carbs, fat_target: t.fat,
-          dietary_prefs: [], onboarded: true,
-        }),
-        db.seedStarter(Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ name: i.name, qty: i.qty, cat, done: i.done }))), wLbs),
-      ]);
+      // Sequential, deliberately: seedStarter does a plain insert (not upsert)
+      // of the whole starter grocery list, so it must only ever run once per
+      // onboarding. Running it in parallel with updateProfile meant a failure
+      // in one didn't stop the other — if updateProfile failed after seedStarter
+      // had already succeeded, retrying finish() would insert the starter list
+      // a second time. Awaiting updateProfile first, and only seeding after it
+      // succeeds, makes retries safe: the grocery/weight writes are attempted
+      // only once onboarded:true is confirmed on its way to being persisted.
+      await db.updateProfile({
+        name: name.trim() || "there", goal, units,
+        weight_lbs: wLbs, target_lbs: tLbs,
+        kcal_target: t.kcal, protein_target: t.protein, carbs_target: t.carbs, fat_target: t.fat,
+        dietary_prefs: [], onboarded: true,
+      }, uid);
+      await db.seedStarter(Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ name: i.name, qty: i.qty, cat, done: i.done }))), wLbs, uid);
       onDone();
     } catch (e) {
       setErr(e?.message || "Couldn't save — try again.");
@@ -2291,6 +2323,6 @@ export default function NutriCookApp() {
     </Frame>
   );
   if (phase === "auth") return <AuthScreen />;
-  if (phase === "onboarding") return <OnboardingScreen email={session?.user?.email} defaultName={needName} onDone={() => bootstrap(session)} />;
+  if (phase === "onboarding") return <OnboardingScreen email={session?.user?.email} uid={session?.user?.id} defaultName={needName} onDone={() => bootstrap(session)} />;
   return <MainApp boot={boot} mode="live" email={session?.user?.email} onSignOut={signOut} />;
 }

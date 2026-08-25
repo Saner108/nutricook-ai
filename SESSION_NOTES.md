@@ -104,6 +104,105 @@ Left in place but unused; consider deleting or clearly marking deprecated.
     passwords predating any policy — rejecting those client-side would
     incorrectly lock them out).
 
+## Code review pass (post-admin-route review)
+
+A `/code-review` over the full branch diff surfaced 15 findings. All but one
+were fixed; details below.
+
+**Fixed:**
+- No `/api/generate` caller (`remix`, `streamRecipes`, fridge scan) ever sent
+  an `Authorization` header — every request 401s once Supabase is configured,
+  silently making the new rate limiter unreachable. Pre-existing, not
+  introduced this session, but only visible once Supabase is actually turned
+  on (demo mode skips the auth check entirely). Fixed via a shared
+  `authHeaders()` helper, injected into `streamRecipes` through its existing
+  `fetchFn` param — the frozen signature is untouched, only the default
+  implementation used when no `fetchFn` is passed.
+- `downscaleImageToBase64`'s `img.onload` body could throw uncaught (e.g.
+  `getContext` returning null) without ever settling the promise, hanging the
+  scan UI forever. Now wrapped in try/catch with an explicit `reject`.
+- The 4MB fridge-photo cap was checked *after* `useQuota("scan")`, so an
+  oversized photo that never left the browser still cost a scan. Reordered,
+  and the cap raised to 12MB — the whole point of downscaling is handling
+  large photos, so a 4MB raw-file cap was rejecting the case it exists for.
+- Onboarding's `finish()` ran `db.updateProfile` and `db.seedStarter` via
+  `Promise.all`. If `updateProfile` failed after `seedStarter` had already
+  succeeded, retrying `finish()` re-inserted the whole starter grocery list
+  (`grocery_items` has no unique constraint, plain `insert` not `upsert`).
+  Reverted to sequential for this specific pair — `db.js`'s internal
+  grocery+weight parallelism inside `seedStarter` was fine and is unchanged.
+- Sign-in lockout: after the 5th failure set the cooldown, the generic
+  provider error message immediately overwrote it, so the user only learned
+  they were locked out on their *next* attempt. Fixed to show the cooldown
+  message immediately.
+- `db.updateProfile`/`db.seedStarter` each called `supabase.auth.getUser()`
+  independently; called concurrently from onboarding this meant two redundant
+  network round trips before either write started. Both now take an optional
+  `uid` param (backward compatible — all other call sites still self-lookup),
+  wired through from the session at the one call site that had it available.
+- `admin_logs`/`rate_limit_hits`: the admin_logs migration's comment claimed
+  "same posture as rate_limit_hits" but only admin_logs actually had
+  `revoke all from anon, authenticated`. Cesar approved adding the matching
+  revoke to `rate_limit_hits` (unrun migration, safe in-place edit) — see
+  `db/migration_ratelimit.sql`.
+- `getUserByEmail()` returned `null` for both "confirmed not found" and "the
+  lookup itself failed" (network error, bad GoTrue response), so a transient
+  failure was recorded in the append-only audit log as a false "user does not
+  exist." Now returns `undefined` for a failed lookup, `null` only after a
+  fully-scanned miss; `getUser.js` logs `outcome:"error"` and returns 502 on
+  `undefined` instead of a false 404.
+- `requireAdmin()` collapsed both denial reasons to `null`, forcing
+  `getUser.js` to call `getUser()` a second time just to figure out which one
+  happened (and what to log). Now returns a discriminated result
+  (`{ok:false, reason, caller}`); the second call is gone.
+- Profile + subscription reads in `getUser.js` were sequential and the
+  fail-closed comment overclaimed ("aborts the whole action" when the reads
+  had already executed). Parallelized via `Promise.all`; comment corrected to
+  state the actual guarantee — no *response* leaves without a matching audit
+  record, not that the reads themselves are prevented.
+- `api/generate.js`'s rate-limit and quota fail-open branches were completely
+  silent — with `migration_ratelimit.sql` unrun (still true), rate limiting
+  has been a silent no-op with zero signal. Both branches now `console.warn`.
+- `insertRow`/`upsert` in `_lib/supabaseAdmin.js` were near-duplicate code.
+  Merged into an internal `writeRows(table, rows, {merge})`; both exports are
+  now thin wrappers, each keeping its own doc comment.
+- Unauthenticated callers could flood `admin_logs` with arbitrary
+  attacker-controlled `email` values (denied attempts are audit-logged by
+  design). Added format/length validation (must contain `@`, ≤254 chars)
+  *before* `requireAdmin()` runs or anything is logged — closes the
+  "10KB garbage string" case. **Does not** stop a flood of short,
+  well-formed-looking strings — see open items below.
+- Added `test/admin-auth.test.mjs`: `isAllowlisted()` unset/empty denies
+  everyone (the single most load-bearing behavior here) plus case-insensitive
+  matching, `requireAdmin()`'s no-token path, `getUserByEmail()`'s
+  undefined-vs-null contract on the paths reachable without a live network
+  call. Full suite: 42/42.
+
+**Deliberately not fixed — reasoning, not an oversight:**
+- The review flagged that `persistSession:false` + Stripe's redirect-based
+  checkout means the in-memory session is gone when the browser returns from
+  Stripe, so `?upgraded=1`'s effect never fires and (per the review) "Pro is
+  never reflected." **That claim is overstated.** Traced it: `pro` state is
+  initialized directly from `isProActive(boot?.sub)`, where `boot.sub` is the
+  real `subscriptions` row loaded fresh on every boot — independent of the
+  query param. So Pro status is correct the moment the user is signed back
+  in, regardless of whether `?upgraded=1` survived. The only real loss is a
+  cosmetic "You're now Pro!" confirmation, and only on the sub-path where the
+  user re-authenticates via **OAuth** specifically (OAuth's
+  `redirectTo: window.location.origin` strips the query string; email/password
+  sign-in doesn't touch the URL at all, so the param survives and the effect
+  fires normally there). Not changed because I can't verify Supabase's
+  redirect-URL allowlist behavior against the live project from here — if
+  it does exact-match rather than ignoring query strings, widening
+  `redirectTo` to preserve the query could break OAuth sign-in outright,
+  which is a worse outcome than a missing toast. Flagging for a decision with
+  real Supabase-dashboard access, not fixing blind.
+- Unauthenticated flooding of `/api/admin/getUser` is only partially
+  mitigated (see above). Closing it fully needs IP-based rate limiting, which
+  has no existing hook in this schema (`check_rate_limit` is keyed on a
+  `uuid` user id, not available for an anonymous caller) — that's a new
+  schema/infra decision, not something to invent unilaterally mid-fix.
+
 ## Open items / needs a decision before more code
 
 - #4 rendering: needs a specific slow screen/interaction to target.
