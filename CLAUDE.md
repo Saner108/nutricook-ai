@@ -36,11 +36,23 @@ AI-powered meal planning app. Target users: fitness-minded individuals managing 
 
 Unknown model strings silently fall back to `claude-sonnet-4-6`.
 
+## API Input Limits (api/generate.js)
+- `MAX_MESSAGES = 12` — rejects requests with more than 12 messages
+- `MAX_CONTENT_CHARS = 60_000` — rejects total message content exceeding ~15K tokens
+- `MAX_TOKENS_CAP = 2000` — server-side cap on output tokens regardless of client value
+- These guard against input-token cost abuse (max_tokens only caps output)
+
+## Webhook Events Handled (api/stripe-webhook.js)
+- `checkout.session.completed` → status: active
+- `customer.subscription.updated` → status mirrors Stripe status (active/past_due/etc.)
+- `customer.subscription.deleted` → status: canceled
+- `invoice.payment_failed` → status: past_due (immediate, before Stripe retry cycle)
+
 ## Commands
 ```bash
 npm run dev       # dev server at localhost:5173 (mocks Anthropic if no API key set)
 npm run build     # production build — 3 chunks: index.js + vendor.js + supabase.js
-node test/run.mjs # full test suite (96 tests)
+node test/run.mjs # full test suite (122 tests)
 ```
 
 ## Sub-agents (.claude/agents/)
