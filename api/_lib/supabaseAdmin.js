@@ -181,3 +181,46 @@ export async function selectOne(table, match, columns = "*") {
     return null;
   }
 }
+
+export async function selectSubscriptionById(subscriptionId) {
+  if (!supabaseConfigured) return { data: null, error: "supabase_unavailable" };
+  try {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=user_id,stripe_subscription_id&limit=2`, {
+      headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+    });
+    if (!r.ok) return { data: null, error: "subscription_lookup_failed" };
+    const rows = await r.json();
+    if (!Array.isArray(rows)) return { data: null, error: "invalid_subscription_result" };
+    if (rows.length > 1) return { data: null, error: "ambiguous_subscription" };
+    if (rows.length === 0) return { data: null, error: null };
+    if (typeof rows[0]?.user_id !== "string" || !rows[0].user_id || rows[0].stripe_subscription_id !== subscriptionId) {
+      return { data: null, error: "invalid_subscription_result" };
+    }
+    return { data: rows[0], error: null };
+  } catch {
+    return { data: null, error: "subscription_lookup_failed" };
+  }
+}
+
+export async function updateSubscription(row) {
+  const { user_id: userId, stripe_subscription_id: subscriptionId, ...changes } = row;
+  if (!supabaseConfigured || typeof userId !== "string" || !userId || typeof subscriptionId !== "string" || !subscriptionId) return false;
+  try {
+    const r = await fetchWithTimeout(`${URL}/rest/v1/subscriptions?user_id=eq.${encodeURIComponent(userId)}&stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE,
+        Authorization: `Bearer ${SERVICE}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(changes),
+    });
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length === 1 && rows[0]?.user_id === userId
+      && rows[0].stripe_subscription_id === subscriptionId && rows[0].status === changes.status;
+  } catch {
+    return false;
+  }
+}

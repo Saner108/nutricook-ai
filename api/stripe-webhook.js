@@ -1,10 +1,10 @@
 // Stripe webhook receiver for subscription lifecycle events.
 // Verifies the Stripe-Signature header (HMAC SHA-256) with STRIPE_WEBHOOK_SECRET,
 // then upserts the `subscriptions` row (via the Supabase service role) so the app
-// has a single source of truth for Pro status. When Supabase isn't configured the
-// events are simply logged, as before.
+// has a single source of truth for Pro status. When Supabase isn't configured,
+// verified events are acknowledged without persistence.
 import crypto from "crypto";
-import { supabaseConfigured, upsert } from "./_lib/supabaseAdmin.js";
+import { supabaseConfigured, upsert, selectSubscriptionById, updateSubscription } from "./_lib/supabaseAdmin.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -43,26 +43,38 @@ function userIdFrom(obj) {
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).end(); return; }
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    res.status(503).json({ error: { message: "Webhook is not configured" } });
+    return;
+  }
   const payload = await readRawBody(req);
-  if (secret && !signatureValid(secret, req.headers["stripe-signature"] || "", payload)) {
+  if (!signatureValid(secret, req.headers["stripe-signature"] || "", payload)) {
     res.status(400).json({ error: { message: "Invalid signature" } });
     return;
   }
 
-  let event = {};
-  try { event = JSON.parse(payload); } catch {}
-  const obj = event.data?.object || {};
+  let event;
+  try { event = JSON.parse(payload); } catch {
+    res.status(400).json({ error: { message: "Invalid JSON body" } });
+    return;
+  }
+  if (!supabaseConfigured) {
+    res.status(200).json({ received: true });
+    return;
+  }
+  const obj = event?.data?.object || {};
   const userId = userIdFrom(obj);
 
   const persist = async row => {
-    if (!supabaseConfigured || !row.user_id) return;
-    await upsert("subscriptions", row);
+    if (!row.user_id) return false;
+    return upsert("subscriptions", row);
   };
 
-  switch (event.type) {
+  let persisted = true;
+  switch (event?.type) {
     case "checkout.session.completed":
       console.log("[stripe] subscription started — customer:", obj.customer);
-      await persist({
+      persisted = await persist({
         user_id: userId,
         stripe_customer_id: obj.customer || null,
         stripe_subscription_id: obj.subscription || null,
@@ -70,7 +82,7 @@ export default async function handler(req, res) {
       });
       break;
     case "customer.subscription.updated":
-      await persist({
+      persisted = await updateSubscription({
         user_id: userId,
         stripe_customer_id: obj.customer || null,
         stripe_subscription_id: obj.id || null,
@@ -81,7 +93,7 @@ export default async function handler(req, res) {
       break;
     case "customer.subscription.deleted":
       console.log("[stripe] subscription canceled:", obj.customer);
-      await persist({
+      persisted = await updateSubscription({
         user_id: userId,
         stripe_customer_id: obj.customer || null,
         stripe_subscription_id: obj.id || null,
@@ -89,20 +101,29 @@ export default async function handler(req, res) {
         current_period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
       });
       break;
-    case "invoice.payment_failed":
-      // A renewal payment failed. Stripe will retry, but we mark the subscription
-      // past_due immediately so the app can gate pro features without waiting for
-      // customer.subscription.updated (which fires after Stripe retries are exhausted).
-      // The customer ID on invoice events is obj.customer; subscription is obj.subscription.
-      await persist({
-        user_id: userId,
-        stripe_customer_id: obj.customer || null,
-        stripe_subscription_id: obj.subscription || null,
+    case "invoice.payment_failed": {
+      // Mark past_due only on the exact stored subscription, including at write time.
+      const subscription = obj.subscription ?? obj.parent?.subscription_details?.subscription;
+      if (subscription == null && obj.parent?.type !== "subscription_details" && !obj.parent?.subscription_details) break;
+      const subscriptionId = typeof subscription === "string" ? subscription : subscription?.id;
+      if (typeof subscriptionId !== "string" || !subscriptionId) {
+        persisted = false;
+        break;
+      }
+      const { data, error } = await selectSubscriptionById(subscriptionId);
+      persisted = !error && Boolean(data) && await updateSubscription({
+        user_id: data.user_id,
+        stripe_subscription_id: subscriptionId,
         status: "past_due",
       });
       break;
+    }
     default:
       break;
+  }
+  if (!persisted) {
+    res.status(503).json({ error: { message: "Subscription update unavailable — please retry." } });
+    return;
   }
   res.status(200).json({ received: true });
 }

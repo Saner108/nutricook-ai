@@ -2,7 +2,7 @@
 
 **Turn your ingredients into personalized recipes — powered by Claude AI.**
 
-NutriCook AI is a full-stack nutrition coaching app that generates personalized recipes based on what you have in your kitchen, your dietary preferences, and health goals. Built as part of the Claude Corps Fellowship by Cesar Sanchez, Head Nutrition Coach at TAMUCC Recreational Sports Center.
+NutriCook AI is a full-stack nutrition coaching project that generates recipes based on kitchen ingredients, dietary preferences, and goals. Created by Cesar Sanchez, drawing on prior nutrition-coaching experience at Texas A&M University–Corpus Christi.
 
 **[Live demo](https://nutricook-ai-kappa.vercel.app/)**
 
@@ -68,22 +68,30 @@ nutricook-ai/
 │   ├── migration.sql             ← Run first: core schema + consume_quota RPC
 │   ├── migration_ratelimit.sql   ← Run second: rate limiting
 │   ├── migration_admin_logs.sql  ← Run third: audit log
-│   └── migration_indexes.sql     ← Run last: performance indexes (safe, non-destructive)
-└── test/                         ← 96 tests, 0 failures
+│   ├── migration_indexes.sql     ← Performance indexes
+│   ├── migration_profile_rls.sql ← Prepared policy-only addendum for existing databases; not applied
+│   └── test_profile_rls.sql      ← Manual rollback-only checks for an isolated database; not run
+└── test/                         ← Node test suite; see validation commands below
     ├── backend.test.mjs
     ├── extractRecipes.test.mjs
     ├── ingredients.test.mjs      ← parseIngredientInput: 25 cases including dozen/handful/pinch
+    ├── handlers.test.mjs         ← Actual API handlers with mocked services and signed webhook fixtures
+    ├── persistence.test.mjs      ← Save errors, grocery IDs, overlapping saves and auth transitions
     ├── quota.test.mjs
-    └── security.test.mjs         ← Webhook replay, JWT, ALLOWED_MODELS, token cap
+    ├── security.test.mjs         ← Webhook replay, JWT, ALLOWED_MODELS, token cap
+    ├── setup.test.mjs            ← Server-only local environment loading
+    └── startup.test.mjs          ← Bundle, import and render the shipped application
 ```
 
 ## Getting started
+
+Use a patched, supported Node.js 22 or 24 release; the locked Supabase packages require Node.js 22 or later. Local validation uses a temporary Node.js 24.22.2 runtime without changing project dependencies or the system installation.
 
 ```bash
 cp .env.example .env.local
 # Fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (optional — app works without them)
 # Fill in ANTHROPIC_API_KEY for real recipe generation (mock data used without it)
-npm install
+npm ci
 npm run dev      # localhost:5173
 npm run build    # production build
 node test/run.mjs  # run test suite
@@ -91,13 +99,51 @@ node test/run.mjs  # run test suite
 
 ## Environment variables
 
-See `.env.example` for the full list with descriptions. The app runs in **demo mode** (session-only mock data) without any Supabase or Stripe config.
+See `.env.example` for the full list. Keep service-role, Anthropic, and Stripe secrets server-side; never prefix them with `VITE_`.
+
+| Context | Actual behavior |
+|---|---|
+| `npm run dev`, no Anthropic key | Vite serves sample recipes, scan results, and simulated checkout; no real AI or payment calls |
+| `npm run dev`, Anthropic key in `.env.local` | The development proxy loads the server-only key and makes real Anthropic requests; local checkout remains simulated |
+| Vercel deployment | `/api/generate` requires `ANTHROPIC_API_KEY`; missing configuration returns an error, not sample recipes |
+| No frontend Supabase variables | Session-only demo; recipes, groceries, and preferences do not survive a reload |
+| Configured Supabase | Sign-in and persistence use Supabase; configure matching server variables and apply reviewed schema before production use |
+| Stripe configured | Checkout redirects to Stripe; only verified server-side subscription state grants live Pro access |
+
+The Vite development middleware does **not** exercise the deployed authentication, quota, Stripe, or webhook handlers. Run handler tests separately. Do not deploy an unrestricted AI proxy: Supabase authentication and server-side quota configuration must be verified before enabling public paid AI usage.
+
+## Maintenance changes — October 30, 2026
+
+- Fixed the shipped React entry point and added an import/render regression test; a successful bundle alone had not caught the blank-screen failure.
+- Hardened webhook verification, subscription-write failure handling, invoice ownership, request validation, and fail-closed metering.
+- Made recipe and grocery persistence report errors and retain server-assigned IDs; live generation uses authenticated requests and server quota responses.
+- Restricted checkout simulation to demo mode and stopped treating a checkout-return URL as proof of a paid subscription.
+- Fixed sign-in bootstrapping after checkout navigation and serialized overlapping recipe saves to avoid duplicate shared ingredients.
+- Fixed local `.env.local` loading and documented local mock versus deployed behavior, runtime requirements, and AI-estimated nutrition.
+- Prepared the approved profile-policy addendum, matching fresh-install correction, and isolated database verification script. No SQL was executed.
+
+These notes describe source changes, not deployment proof. Database-policy remediation and dependency upgrades require separate review; no live payment or production database mutation is part of local validation.
+
+### Validation recorded October 30, 2026
+
+- `node test/run.mjs`: **246 passed, 0 failed, 0 skipped** using temporary Node.js 24.22.2 and the existing lockfile.
+- `npm run build` and `git diff --check`: passed. Project dependency versions and the system Node.js installation were not changed.
+- Local browser checks: dashboard startup, three streamed sample recipes, recipe Save, recipe ingredients in Basket, manual grocery add/toggle, and the final compiled frontend with no app console errors.
+- Handler/persistence tests use controlled service mocks and signed fixtures; they do not establish live Stripe/Supabase behavior. The webhook timestamp test uses a fixed clock without changing production signature limits.
+- `db/test_profile_rls.sql` is an **unexecuted**, rollback-only script for a separately authorized isolated database. Neither the base schema nor the new policy addendum was applied to a live database.
+
+### Known limits before production use
+
+- Databases using the original profile `FOR ALL` policy still allow owner deletion and cascading removal of linked records, including usage counters. The prepared correction has not been applied or tested in a database; deployed policies and grants require separate verification and approval.
+- Recipe, Want-to-Try, and grocery writes are separate operations, not one transaction. Confirmed recipe IDs are reused on retry, but a lost insert response can still cause duplicates; server-side idempotency remains follow-up work.
+- Subscription updates, deletions, and failed invoices cannot replace a different stored subscription. Older checkout-completed events and broader event ordering still need dedicated handling and tests.
+- Dependency advisories and real authenticated Supabase/Stripe workflows remain separate checks; passing mocked tests is not production-service verification.
 
 ## Security
 
 - All Anthropic API calls go through `api/generate.js` — never from the browser
 - Model and max_tokens are both pinned server-side (client values are advisory)
-- Stripe webhook signature verified with replay-attack protection (300s window)
+- Stripe webhook requires its signing secret and validates the signature with a 300-second timestamp window; failed subscription writes return retryable errors
 - JWT `exp`, `iat`, and `nbf` claims all validated on the local fast-path
 - Admin endpoints gated by email allowlist (`ADMIN_EMAILS` env var, fail-closed)
 - HTTP security headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`

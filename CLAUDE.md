@@ -20,6 +20,8 @@ AI-powered meal planning app. Target users: fitness-minded individuals managing 
 - `db/migration_ratelimit.sql` — **run second**: `rate_limit_hits` table + `check_rate_limit` RPC
 - `db/migration_admin_logs.sql` — **run third**: append-only audit log for admin actions
 - `db/migration_indexes.sql` — **run last (anytime)**: performance indexes on `user_id` columns; safe to apply after the others without downtime
+- `db/migration_profile_rls.sql` — prepared owner SELECT/INSERT/UPDATE policy addendum for existing databases; execution requires separate approval
+- `db/test_profile_rls.sql` — unexecuted, rollback-only verification for an isolated database; never run against production as part of deployment
 
 ## Frozen Contracts
 - `streamRecipes(apiKey, prompt, onUpdate, fetchFn)` — signature is frozen
@@ -52,7 +54,7 @@ Unknown model strings silently fall back to `claude-sonnet-4-6`.
 ```bash
 npm run dev       # dev server at localhost:5173 (mocks Anthropic if no API key set)
 npm run build     # production build — 3 chunks: index.js + vendor.js + supabase.js
-node test/run.mjs # full test suite (122 tests)
+node test/run.mjs # full test suite; dated results are recorded in README.md
 ```
 
 ## Sub-agents (.claude/agents/)

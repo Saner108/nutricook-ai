@@ -73,20 +73,37 @@ export async function removeFavorite(name) {
 }
 
 // ── Save an AI recipe: recipes + try_list + grocery rows ──────────────────
-export async function saveRecipe(recipe, groceryToAdd) {
-  const { data: u } = await supabase.auth.getUser();
-  const uid = u.user.id;
-  const { data: row } = await supabase.from("recipes").insert({
-    user_id: uid, name: recipe.name, difficulty: recipe.difficulty, prep_time: recipe.prepTime,
-    servings: recipe.servings, macros: recipe.macros, ingredients: recipe.ingredients || [], steps: recipe.steps || [],
-  }).select("id").single();
-  if (row?.id) await supabase.from("try_list").upsert({ user_id: uid, recipe_id: row.id }, { onConflict: "user_id,recipe_id" });
-  if (groceryToAdd?.length) {
-    await supabase.from("grocery_items").insert(
-      groceryToAdd.map(g => ({ user_id: uid, name: g.name, qty: g.qty || "", category: g.cat || "From Recipes", done: false, source: "recipe" }))
-    );
+// shortcut: retries reuse confirmed IDs only; add server idempotency to resolve lost insert responses.
+export async function saveRecipe(recipe, groceryToAdd, savedId = null) {
+  let id = savedId;
+  try {
+    const auth = await supabase.auth.getUser();
+    if (auth.error || !auth.data?.user) return { data: { id }, error: auth.error || { message: "Please sign in again." } };
+    const uid = auth.data.user.id;
+    if (!id) {
+      const result = await supabase.from("recipes").insert({
+        user_id: uid, name: recipe.name, difficulty: recipe.difficulty, prep_time: recipe.prepTime,
+        servings: recipe.servings, macros: recipe.macros, ingredients: recipe.ingredients || [], steps: recipe.steps || [],
+      }).select("id").single();
+      if (result.error) return { data: { id }, error: result.error };
+      id = result.data?.id;
+      if (!id) return { data: { id: null }, error: { message: "Recipe save wasn't confirmed. Please retry." } };
+    }
+    const result = await supabase.from("try_list").upsert({ user_id: uid, recipe_id: id }, { onConflict: "user_id,recipe_id" });
+    if (result.error) return { data: { id }, error: { ...result.error, message: `Recipe saved, but Want to Try failed: ${result.error.message}` } };
+    let grocery = [];
+    if (groceryToAdd?.length) {
+      const result = await supabase.from("grocery_items").insert(
+        groceryToAdd.map(g => ({ user_id: uid, name: g.name, qty: g.qty || "", category: g.cat || "From Recipes", done: false, source: "recipe" }))
+      ).select("*");
+      if (result.error) return { data: { id }, error: { ...result.error, message: `Recipe saved, but Basket failed: ${result.error.message}` } };
+      if (result.data?.length !== groceryToAdd.length) return { data: { id }, error: { message: "Basket save wasn't confirmed. Please reload before retrying." } };
+      grocery = result.data.map(g => ({ id: g.id, name: g.name, qty: g.qty || "", cat: g.category, done: g.done }));
+    }
+    return { data: { id, grocery }, error: null };
+  } catch (error) {
+    return { data: { id }, error };
   }
-  return row?.id ?? null;
 }
 export async function removeTryList(name) {
   const { data: rows } = await supabase.from("recipes").select("id").eq("name", name);
@@ -96,14 +113,25 @@ export async function removeTryList(name) {
 
 // ── Grocery ───────────────────────────────────────────────────────────────
 export async function addGrocery(item) {
-  const { data: u } = await supabase.auth.getUser();
-  const { data: row } = await supabase.from("grocery_items").insert({
-    user_id: u.user.id, name: item.name, qty: item.qty || "", category: item.cat || "Other", done: false, source: "manual",
-  }).select("id").single();
-  return row?.id ?? null;
+  try {
+    const auth = await supabase.auth.getUser();
+    if (auth.error || !auth.data?.user) return { data: null, error: auth.error || { message: "Please sign in again." } };
+    const result = await supabase.from("grocery_items").insert({
+      user_id: auth.data.user.id, name: item.name, qty: item.qty || "", category: item.cat || "Other", done: false, source: "manual",
+    }).select("id").single();
+    if (result.error) return result;
+    if (!result.data?.id) return { data: null, error: { message: "Basket save wasn't confirmed. Please retry." } };
+    return { data: { ...item, id: result.data.id }, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
 }
 export async function toggleGrocery(id, done) {
-  await supabase.from("grocery_items").update({ done }).eq("id", id);
+  try {
+    return await supabase.from("grocery_items").update({ done }).eq("id", id).select("id").single();
+  } catch (error) {
+    return { data: null, error };
+  }
 }
 
 // ── Water ─────────────────────────────────────────────────────────────────

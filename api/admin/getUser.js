@@ -70,13 +70,8 @@ export default async function handler(req, res) {
   // purpose rather than guessed.
 
   // FAIL CLOSED: the audit row is written BEFORE any data goes back, and a
-  // failed write aborts the whole action. This is deliberately the OPPOSITE of
-  // the fail-open policy in api/generate.js, where a failed consume_quota lets
-  // the request through. The asymmetry is intentional: failing open on metering
-  // at worst gives away one generation and never blocks a paying user, while
-  // failing open on an audit log means one person read another person's account
-  // data with no record that it ever happened. A refused read is recoverable
-  // (retry it); an unlogged privileged read is not.
+  // failed write aborts the whole action. Like api/generate.js's metering gate,
+  // this refuses the action when its required database check or write fails.
   const logged = await logAdminAction({
     adminUserId: admin.id,
     adminEmail: admin.email,

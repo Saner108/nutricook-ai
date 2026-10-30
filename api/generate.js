@@ -46,9 +46,22 @@ export default async function handler(req, res) {
   // Validate individual message shape — Anthropic requires each message to have
   // a `role` string and a `content` field. A message like [null] or [{}] passes
   // the array check above but would return a cryptic 400 from Anthropic.
-  const badMessage = messages.find(
-    m => !m || typeof m !== "object" || !m.role || m.content === undefined
-  );
+  const badMessage = messages.some(m => {
+    if (!m || typeof m !== "object" || Array.isArray(m)) return true;
+    if (m.role !== "user" && m.role !== "assistant") return true;
+    if (m.content === undefined) return true;
+    if (typeof m.content === "string") return false;
+    return !Array.isArray(m.content) || m.content.length === 0 || m.content.some(block => {
+      if (!block || typeof block !== "object" || Array.isArray(block)) return true;
+      if (block.type === "text") return typeof block.text !== "string";
+      if (block.type !== "image") return true;
+      const source = block.source;
+      if (!source || typeof source !== "object" || Array.isArray(source)) return true;
+      return source.type === "base64"
+        ? typeof source.media_type !== "string" || typeof source.data !== "string"
+        : source.type !== "url" || typeof source.url !== "string";
+    });
+  });
   if (badMessage) {
     res.status(400).json({ error: { message: "each message must have a role and content field" } });
     return;
@@ -116,17 +129,20 @@ export default async function handler(req, res) {
       res.status(429).json({ error: { code: "rate_limited", message: "Too many requests — please slow down." } });
       return;
     }
-    // withinRateLimit === null means the check itself failed (e.g. transient
-    // DB error, or migration_ratelimit.sql not yet run); fail open here too,
-    // same policy as the quota check below.
+    if (withinRateLimit !== true) {
+      res.status(503).json({ error: { message: "Rate limit check unavailable — please try again." } });
+      return;
+    }
     const kind = isScanRequest(messages) ? "scan" : "gen";
     const allowed = await rpc("consume_quota", { p_user: user.id, p_kind: kind });
     if (allowed === false) {
       res.status(402).json({ error: { code: "quota_exceeded", message: "Daily free limit reached" } });
       return;
     }
-    // allowed === null means the quota check itself failed (e.g. transient DB
-    // error); fail open on metering rather than blocking a valid/paying user.
+    if (allowed !== true) {
+      res.status(503).json({ error: { message: "Quota check unavailable — please try again." } });
+      return;
+    }
   }
 
   // AbortController gives us a clean 25-second deadline on the Anthropic

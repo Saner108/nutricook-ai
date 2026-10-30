@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Dev-only /api/generate so `npm run dev` works like production Vercel.
@@ -22,7 +22,7 @@ const MOCK_RECIPES = {
   ],
 };
 
-function devApiPlugin() {
+function devApiPlugin(env) {
   return {
     name: 'dev-api-generate',
     configureServer(server) {
@@ -38,7 +38,7 @@ function devApiPlugin() {
         req.on('end', async () => {
           let body = {};
           try { body = JSON.parse(raw || '{}'); } catch {}
-          const key = process.env.ANTHROPIC_API_KEY;
+          const key = env.ANTHROPIC_API_KEY;
           if (key) {
             try {
               const upstream = await fetch('https://api.anthropic.com/v1/messages', {
@@ -100,8 +100,8 @@ function devApiPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), devApiPlugin()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), devApiPlugin(loadEnv(mode, process.cwd(), ''))],
   build: {
     // Target modern browsers — drops legacy polyfills for ~5% smaller output.
     target: 'es2020',
@@ -119,4 +119,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

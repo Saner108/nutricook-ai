@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { hasSupabase, supabase } from "../src/lib/supabase.js";
 import { isProActive, computeStreak } from "../src/lib/quota.js";
 import * as db from "../src/lib/db.js";
@@ -409,20 +409,49 @@ function MealCard({ meal, compact, isFav, onFav, onSwap }) {
   );
 }
 
+async function authenticatedFetch(url, options) {
+  const headers = { ...options.headers };
+  if (hasSupabase) {
+    const result = await supabase.auth.getSession();
+    if (result.error || !result.data?.session) return new Response(JSON.stringify({ error: { message: "Please sign in again." } }), { status: 401 });
+    headers.Authorization = `Bearer ${result.data.session.access_token}`;
+  }
+  return fetch(url, { ...options, headers });
+}
+
 // ── AI Recipe Result Card ─────────────────────────────────
-function AICard({ recipe, index, onSave, onReplace }) {
+function AICard({ recipe, index, onSave, onReplace, openPaywall }) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState(null);
+  const savingRef = useRef(false);
   const [remixing, setRemixing] = useState(false);
   const [swapMode, setSwapMode] = useState(false);
   const [swapVal, setSwapVal] = useState("");
   const [remixErr, setRemixErr] = useState(null);
 
+  const save = async () => {
+    if (saved || savingRef.current || remixing || !onSave) return;
+    savingRef.current = true;
+    setSaving(true); setSaveErr(null);
+    try {
+      const result = await onSave(recipe);
+      if (!result?.data || result.error) { setSaveErr(`${result?.error?.message || "Couldn't save this recipe."} Tap Save to retry.`); return; }
+      setSaved(true);
+    } catch {
+      setSaveErr("Couldn't save this recipe. Tap Save to retry.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const remix = async instruction => {
-    if (remixing) return;
+    if (remixing || savingRef.current) return;
     setRemixing(true); setRemixErr(null); setSwapMode(false);
     try {
-      const res = await fetch("/api/generate", {
+      const res = await authenticatedFetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -430,13 +459,17 @@ function AICard({ recipe, index, onSave, onReplace }) {
           messages: [{ role: "user", content: `Remix this recipe: ${JSON.stringify(recipe)}. Instruction: ${instruction}. Keep it realistic and adjust macros accordingly. Respond ONLY with valid JSON of the exact same schema (single recipe object, no wrapper): {"name":"","difficulty":"Easy","prepTime":"","servings":2,"macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[""],"steps":[""]}` }],
         }),
       });
-      if (!res.ok) throw new Error("remix failed");
       const data = await res.json();
+      if (!res.ok || data.error) {
+        if (res.status === 402) openPaywall?.();
+        setRemixErr(res.status === 429 ? "Too many requests — wait a moment and retry." : data.error?.message || "Couldn't remix this recipe. Please retry.");
+        return;
+      }
       const text = (data.content || []).map(b => b.text || "").join("");
       const next = JSON.parse(text.replace(/```json|```/g, "").trim());
       if (!next || !next.name || !next.macros) throw new Error("bad remix");
       if (onReplace) onReplace(index, next);
-      setSaved(false);
+      setSaved(false); setSaveErr(null);
     } catch {
       setRemixErr("Remix didn't come out right — try again.");
     } finally {
@@ -505,8 +538,9 @@ function AICard({ recipe, index, onSave, onReplace }) {
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <Btn label="Cook Now" primary onPress={() => setOpen(true)} style={{ flex: 1 }} />
-          <Btn label={saved ? "✓ Saved" : "Save"} onPress={() => { if (!saved && onSave) onSave(recipe); setSaved(s => !s); }} style={{ flex: 1, color: saved ? T.mintDark : undefined, background: saved ? T.mintLight : undefined }} />
+          <Btn label={saving ? "Saving…" : saved ? "✓ Saved" : "Save"} onPress={save} style={{ flex: 1, color: saved ? T.mintDark : undefined, background: saved ? T.mintLight : undefined }} />
         </div>
+        {saveErr && <div role="alert" style={{ fontSize: 12, color: T.error, marginTop: 8 }}>{saveErr}</div>}
         {saved && recipe.ingredients && recipe.ingredients.length > 0 && (
           <div style={{ fontSize: 11, color: T.mintDark, fontWeight: 600, marginTop: 8, textAlign: "center" }}>Saved to Want to Try · ingredients added to Basket</div>
         )}
@@ -621,7 +655,10 @@ async function streamRecipes(apiKey, prompt, onUpdate, fetchFn) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, stream: true, messages: [{ role: "user", content: prompt }] }),
   });
-  if (!res.ok) throw new Error("Recipe service error");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { error: { status: res.status, message: res.status === 429 ? "Too many requests — wait a moment and retry." : data.error?.message || "Couldn't generate recipes. Please retry." } };
+  }
   const reader = res.body.getReader();
   let full = await readSSEText(reader, text => {
     if (onUpdate) onUpdate(extractRecipes(text));
@@ -1135,7 +1172,7 @@ function downscaleImageToBase64(file, { maxDim = 1024, quality = 0.72 } = {}) {
 import { parseIngredientInput, ingLabel } from "../src/lib/ingredients.js";
 
 // ── AI Screen ────────────────────────────────────────────────────────────────
-function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPaywall }) {
+function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, openPaywall }) {
   const [step, setStep] = useState("input"); // input | results
   const [ingredients, setIngredients] = useState([]); // [{name: string, qty: string}]
   const [inputVal, setInputVal] = useState("");
@@ -1199,8 +1236,6 @@ function AIScreen({ prefs, setPrefs, onSaveRecipe, pro, usage, useQuota, openPay
       setError("Add at least one ingredient first — start typing to search, tap a quick-add, or scan your fridge.");
       return;
     }
-    if (!pro && usage.gen >= FREE_LIMITS.gen) { openPaywall(); return; }
-    useQuota("gen");
     setError(null);
     setLoading(true); setError(null); setRecipes([]); setStreamName(null);
     const ingList = ingredients.map(ingLabel).join(", ");
@@ -1218,7 +1253,12 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
       const all = await streamRecipes(null, prompt, ({ complete, partialName }) => {
         setRecipes(complete);
         setStreamName(partialName);
-      });
+      }, authenticatedFetch);
+      if (all.error) {
+        if (all.error.status === 402) openPaywall();
+        setStep("input"); setError(all.error.message);
+        return;
+      }
       setRecipes(all);
       setStreamName(null);
     } catch {
@@ -1233,14 +1273,12 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; }
-    useQuota("scan");
     if (file.size > 4 * 1024 * 1024) { setError("That photo is over 4MB — try a smaller or compressed one."); return; }
     setScanning(true); setError(null);
     (async () => {
       try {
         const base64 = await downscaleImageToBase64(file, { maxDim: 1024, quality: 0.72 });
-        const res = await fetch("/api/generate", {
+        const res = await authenticatedFetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1251,8 +1289,12 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
             ] }],
           }),
         });
-        if (!res.ok) throw new Error("scan failed");
         const data = await res.json();
+        if (!res.ok || data.error) {
+          if (res.status === 402) openPaywall();
+          setError(res.status === 429 ? "Too many requests — wait a moment and retry." : data.error?.message || "Fridge scan failed — please retry.");
+          return;
+        }
         const text = (data.content || []).map(b => b.text || "").join("");
         const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
         const raw = parsed.ingredients || [];
@@ -1268,7 +1310,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
           found.forEach(f => {
             const exists = next.find(i => i.name === f.name);
             if (!exists) next.push(f);
-            else if (f.qty && !exists.qty) exists.qty = f.qty; // enrich with qty if scan found one
+            else if (f.qty && !exists.qty) next[next.indexOf(exists)] = { ...exists, qty: f.qty };
           });
           return next;
         });
@@ -1291,7 +1333,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
           </div>
         </div>
       </div>
-      {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} onSave={onSaveRecipe} onReplace={(idx, next) => setRecipes(prev => prev.map((x, j) => j === idx ? next : x))} />)}
+      {recipes.map((r, i) => <AICard key={i} recipe={r} index={i} onSave={onSaveRecipe} openPaywall={openPaywall} onReplace={(idx, next) => setRecipes(prev => prev.map((x, j) => j === idx ? next : x))} />)}
       {loading && recipes.length < 3 && (
         <div style={{ ...card, background: T.white, marginBottom: 14, padding: "20px", animation: "fadeUp 0.4s ease both" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -1321,7 +1363,7 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
       <div style={{ ...card, padding: "16px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.black }}>Ingredients</div>
-          <button onClick={() => { if (scanning) return; if (!pro && usage.scan >= FREE_LIMITS.scan) { openPaywall(); return; } if (fileRef.current) fileRef.current.click(); }} style={{
+          <button onClick={() => { if (scanning) return; if (fileRef.current) fileRef.current.click(); }} style={{
             display: "flex", alignItems: "center", gap: 6, border: `1px solid ${T.g2}`, background: "transparent", color: T.g6, borderRadius: 99,
             padding: "7px 13px 7px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: scanning ? 0.7 : 1,
           }}><Icon name="camera" size={14} color={T.g6} />{scanning ? "Scanning…" : "Scan fridge"}</button>
@@ -1435,8 +1477,6 @@ Rules: difficulty is Easy/Medium/Hard; macros are realistic PER-SERVING integers
         onPress={generate} style={{ width: "100%", opacity: !ingredients.length ? 0.6 : 1 }} />
       {!pro && (
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: T.g4, marginTop: 12 }}>
-          <span>{Math.max(0, FREE_LIMITS.gen - usage.gen)} of {FREE_LIMITS.gen} free generations left today</span>
-          <span style={{ width: 3, height: 3, borderRadius: 99, background: T.g3 }} />
           <span onClick={openPaywall} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: T.mintDark, fontWeight: 600, cursor: "pointer" }}><Icon name="infinity" size={14} color={T.mintDark} />Go unlimited</span>
         </div>
       )}
@@ -1470,21 +1510,44 @@ function GroceryRow({ item, onToggle }) {
 
 function GroceryScreen({ items, setItems, onAdd, onToggle }) {
   const [newItem, setNewItem] = useState("");
+  const [error, setError] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
+  const toggling = useRef(new Set());
   const total = items.length;
   const done = items.filter(i => i.done).length;
-  const toggle = id => setItems(p => p.map(i => {
-    if (i.id !== id) return i;
-    onToggle?.(id, !i.done);
-    return { ...i, done: !i.done };
-  }));
-  const addItem = () => {
+  const toggle = async id => {
+    const item = items.find(i => i.id === id);
+    if (!item || toggling.current.has(id)) return;
+    toggling.current.add(id); setError(null);
+    try {
+      const result = await onToggle?.(id, !item.done);
+      if (result?.error) { setError("Couldn't update this item. Tap it to retry."); return; }
+      setItems(p => p.map(i => i.id === id ? { ...i, done: !item.done } : i));
+    } catch {
+      setError("Couldn't update this item. Tap it to retry.");
+    } finally {
+      toggling.current.delete(id);
+    }
+  };
+  const addItem = async () => {
     const t = newItem.trim();
-    if (!t) return;
+    if (!t || addingRef.current) return;
     if (items.some(i => i.name.toLowerCase() === t.toLowerCase())) { setNewItem(""); return; }
     const item = { id: Date.now(), name: t.charAt(0).toUpperCase() + t.slice(1), qty: "", cat: guessCategory(t), done: false };
-    setItems(p => [...p, item]);
-    onAdd?.(item);
-    setNewItem("");
+    addingRef.current = true;
+    setAdding(true); setError(null);
+    try {
+      const result = onAdd ? await onAdd(item) : { data: item, error: null };
+      if (result.error || !result.data?.id) { setError("Couldn't add this item. Tap Add to retry."); return; }
+      setItems(p => [...p, result.data]);
+      setNewItem(current => current.trim() === t ? "" : current);
+    } catch {
+      setError("Couldn't add this item. Tap Add to retry.");
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
   };
   const active = items.filter(i => !i.done);
   const inCart = items.filter(i => i.done);
@@ -1511,8 +1574,9 @@ function GroceryScreen({ items, setItems, onAdd, onToggle }) {
         <input value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => e.key === "Enter" && addItem()}
           placeholder="Add an item — e.g. almond milk"
           style={{ flex: 1, border: `1.5px solid ${T.g2}`, borderRadius: 12, padding: "12px 14px", fontSize: 14, outline: "none", background: T.white, color: T.black }} />
-        <Btn label="+ Add" primary small onPress={addItem} style={{ padding: "10px 18px" }} />
+        <Btn label={adding ? "Adding…" : "+ Add"} primary small onPress={addItem} style={{ padding: "10px 18px" }} />
       </div>
+      {error && <div role="alert" style={{ fontSize: 12, color: T.error, marginBottom: 12 }}>{error}</div>}
       {cats.map(cat => (
         <div key={cat} style={{ ...card, marginBottom: 10, padding: "12px 18px", animation: "slideUp .3s cubic-bezier(.22,.68,0,1) both" }}>
           <div style={{ display: "flex", gap: 9, alignItems: "center", padding: "6px 0 4px" }}>
@@ -1912,9 +1976,7 @@ function ProfileScreen({ units, setUnits, weights, setWeights, prefs, setPrefs, 
 }
 
 // ── Paywall ──────────────────────────────────────────────
-const FREE_LIMITS = { gen: 3, scan: 1 };
-
-function Paywall({ onClose, onUpgrade, busy }) {
+function Paywall({ onClose, onUpgrade, busy, error }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 50, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", background: T.white, borderRadius: "24px 24px 0 0", padding: "24px 22px 28px", animation: "fadeUp 0.3s ease both" }}>
@@ -1931,6 +1993,7 @@ function Paywall({ onClose, onUpgrade, busy }) {
           ))}
         </div>
         <Btn label={busy ? "Opening checkout…" : "Start Pro — $4.99 / month"} primary onPress={busy ? () => {} : onUpgrade} style={{ width: "100%", marginBottom: 6 }} />
+        {error && <div role="alert" style={{ fontSize: 12, color: T.error, marginTop: 8 }}>{error}</div>}
         <button onClick={onClose} style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, color: T.g4, padding: "10px" }}>Not now</button>
         <div style={{ fontSize: 11, color: T.g4, textAlign: "center", marginTop: 6 }}>Unlimited until your next billing date. Cancel anytime.</div>
       </div>
@@ -2029,11 +2092,15 @@ function MainApp({ boot, mode, email, onSignOut }) {
     boot?.grocery ? boot.grocery : Object.entries(GROCERY).flatMap(([cat, arr]) => arr.map(i => ({ ...i, cat })))
   );
   const [pro, setPro] = useState(live ? isProActive(boot?.sub) : false);
-  const [usage, setUsage] = useState({ gen: 0, scan: 0 });
   const [paywall, setPaywall] = useState(false);
   const [favorites, setFavorites] = useState(boot?.favorites || []);
   const [tryList, setTryList] = useState(boot?.tryList || []);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
+  const checkoutReturned = useRef(false);
+  const recipeSaves = useRef(new Map());
+  const recipeSaveQueue = useRef(Promise.resolve());
+  const confirmedGroceryNames = useRef(new Set(groceryItems.map(item => item.name.toLowerCase())));
   const mealLogs = boot?.mealLogs || [];
   // A freshly-onboarded live account with no logged activity yet gets the
   // day-one Home (empty state) instead of the seeded demo meals.
@@ -2041,77 +2108,101 @@ function MainApp({ boot, mode, email, onSignOut }) {
 
   // Write-through helpers: persist to Supabase in live mode, no-op in demo.
   const persist = (fn, ...args) => { if (live) Promise.resolve(fn(...args)).catch(() => {}); };
-  const setPrefs = updater => setPrefsRaw(prev => {
-    const next = typeof updater === "function" ? updater(prev) : updater;
+  const setPrefs = updater => {
+    const next = typeof updater === "function" ? updater(prefs) : updater;
+    setPrefsRaw(next);
     persist(db.updateProfile, { dietary_prefs: next });
-    return next;
-  });
+  };
   const setUnits = u => { setUnitsRaw(u); persist(db.updateProfile, { units: u }); };
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    if (sp.get("upgraded") === "1") {
-      setPro(true);
+    if (sp.get("upgraded") === "1") checkoutReturned.current = true;
+    if (checkoutReturned.current) {
       window.history.replaceState({}, "", window.location.pathname);
-      // Confirm against the webhook-written subscription (it may lag a moment).
-      if (live) setTimeout(() => supabase.from("subscriptions").select("*").maybeSingle()
-        .then(({ data }) => { if (data) setPro(isProActive(data)); }), 4000);
-    }
-  }, []);
-  const useQuota = kind => setUsage(u => ({ ...u, [kind]: u[kind] + 1 }));
-  const startCheckout = async () => {
-    setCheckoutBusy(true);
-    try {
-      const headers = {};
       if (live) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) headers.Authorization = `Bearer ${data.session.access_token}`;
+        let cancelled = false;
+        const refresh = () => supabase.from("subscriptions").select("*").maybeSingle()
+          .then(({ data, error }) => { if (!cancelled && !error) setPro(isProActive(data)); })
+          .catch(() => {});
+        refresh();
+        const timer = setTimeout(refresh, 4000);
+        return () => { cancelled = true; clearTimeout(timer); };
       }
-      const res = await fetch("/api/checkout", { method: "POST", headers });
+    }
+  }, [live]);
+  const startCheckout = async () => {
+    if (checkoutBusy) return;
+    setCheckoutBusy(true); setCheckoutError(null);
+    try {
+      const res = await authenticatedFetch("/api/checkout", { method: "POST" });
       const d = await res.json();
+      if (!res.ok || d.error) { setCheckoutError(d.error?.message || "Couldn't open checkout. Please retry."); return; }
       if (d.url) { window.location.href = d.url; return; }
-    } catch {}
-    // Simulated mode (no Stripe keys configured): activate Pro directly.
-    setPro(true);
-    setPaywall(false);
-    setCheckoutBusy(false);
+      if (!live && d.simulated === true) { setPro(true); setPaywall(false); }
+      else setCheckoutError("Checkout isn't available right now. Please retry later.");
+    } catch {
+      setCheckoutError("Couldn't open checkout. Please retry.");
+    } finally {
+      setCheckoutBusy(false);
+    }
   };
   const saveRecipeToGrocery = recipe => {
-    let added = [];
-    setGroceryItems(p => {
-      const have = new Set(p.map(x => x.name.toLowerCase()));
-      added = (recipe.ingredients || [])
-        .map(raw => {
-          // Claude returns ingredients as "1 lb chicken breast", "2 cups rice" etc.
-          // parseIngredientInput splits them so qty lands in its own field.
-          const { name, qty } = parseIngredientInput(String(raw).trim());
-          return { name: name.charAt(0).toUpperCase() + name.slice(1), qty };
-        })
-        .filter(({ name }) => name && !have.has(name.toLowerCase()))
-        .map(({ name, qty }, i) => ({
-          id: Date.now() * 1000 + i,   // * 1000 prevents index-offset collisions across rapid saves
-          name, qty, cat: "From Recipes", done: false,
-        }));
-      return [...p, ...added];
-    });
-    return added;
+    const have = new Set(confirmedGroceryNames.current);
+    return (recipe.ingredients || [])
+      .map(raw => {
+        // Claude returns ingredients as "1 lb chicken breast", "2 cups rice" etc.
+        // parseIngredientInput splits them so qty lands in its own field.
+        const { name, qty } = parseIngredientInput(String(raw).trim());
+        return { name: name.charAt(0).toUpperCase() + name.slice(1), qty };
+      })
+      .filter(({ name }) => {
+        if (!name || have.has(name.toLowerCase())) return false;
+        have.add(name.toLowerCase());
+        return true;
+      })
+      .map(({ name, qty }, i) => ({
+        id: Date.now() * 1000 + i,   // * 1000 prevents index-offset collisions across rapid saves
+        name, qty, cat: "From Recipes", done: false,
+      }));
   };
-  const toggleFavorite = meal => setFavorites(p => {
-    if (p.some(f => f.name === meal.name)) { persist(db.removeFavorite, meal.name); return p.filter(f => f.name !== meal.name); }
+  const toggleFavorite = meal => {
+    if (favorites.some(f => f.name === meal.name)) {
+      setFavorites(p => p.filter(f => f.name !== meal.name));
+      persist(db.removeFavorite, meal.name);
+      return;
+    }
+    setFavorites(p => [...p, { name: meal.name, emoji: meal.emoji, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat }]);
     persist(db.addFavorite, meal);
-    return [...p, { name: meal.name, emoji: meal.emoji, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat }];
-  });
+  };
   // Saving an AI recipe: grocery ingredients + Want-to-Try list, deduped by name.
   const onSaveRecipe = recipe => {
-    const addedGrocery = saveRecipeToGrocery(recipe);
-    setTryList(p => p.some(r => r.name === recipe.name) ? p : [...p, recipe]);
-    persist(db.saveRecipe, recipe, addedGrocery);
+    const key = JSON.stringify(recipe);
+    const progress = recipeSaves.current.get(key) || { id: null };
+    if (progress.pending) return progress.pending;
+    recipeSaves.current.set(key, progress);
+    progress.pending = recipeSaveQueue.current.then(async () => {
+      const addedGrocery = saveRecipeToGrocery(recipe);
+      const result = live ? await db.saveRecipe(recipe, addedGrocery, progress.id) : { data: { id: progress.id, grocery: addedGrocery }, error: null };
+      if (result.data?.id) progress.id = result.data.id;
+      if (result.error) return result;
+      result.data.grocery.forEach(item => confirmedGroceryNames.current.add(item.name.toLowerCase()));
+      setTryList(p => p.some(r => r.name === recipe.name) ? p : [...p, { ...recipe, id: progress.id }]);
+      setGroceryItems(p => [...p, ...result.data.grocery.filter(g => !p.some(item => item.id === g.id))]);
+      return result;
+    }).catch(error => ({ error })).finally(() => { progress.pending = null; });
+    recipeSaveQueue.current = progress.pending;
+    return progress.pending;
   };
   const removeFavorite = name => { setFavorites(p => p.filter(x => x.name !== name)); persist(db.removeFavorite, name); };
   const removeTry = name => { setTryList(p => p.filter(x => x.name !== name)); persist(db.removeTryList, name); };
   const logWeightLbs = asLbs => persist(db.logWeight, asLbs);
-  const onGroceryAdd = item => persist(db.addGrocery, item);
-  const onGroceryToggle = (id, done) => persist(db.toggleGrocery, id, done);
+  const onGroceryAdd = async item => {
+    const result = live ? await db.addGrocery(item) : { data: item, error: null };
+    if (!result.error && result.data) confirmedGroceryNames.current.add(result.data.name.toLowerCase());
+    return result;
+  };
+  const onGroceryToggle = (id, done) => live ? db.toggleGrocery(id, done) : Promise.resolve({ error: null });
   const onWater = glasses => persist(db.setWaterGlasses, glasses);
   const onMarkMeal = (meal, done) => persist(db.markMeal, meal, done);
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [tab]);
@@ -2145,7 +2236,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
           <div key={tab} style={{ animation: "slideUp 0.32s cubic-bezier(.22,.68,0,1) both" }}>
           {tab === "home" && <HomeScreen setTab={setTab} userName={userName} targets={targets} live={live} mealLogs={mealLogs} initialWater={boot?.water} onWater={onWater} onMarkMeal={onMarkMeal} streak={streak} weights={weights} firstRun={firstRun} />}
           {tab === "plan" && <PlanScreen setTab={setTab} favorites={favorites} toggleFavorite={toggleFavorite} targets={targets} live={live} mealLogs={mealLogs} />}
-          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} usage={usage} useQuota={useQuota} openPaywall={() => setPaywall(true)} />}
+          {tab === "ai" && <AIScreen prefs={prefs} setPrefs={setPrefs} onSaveRecipe={onSaveRecipe} pro={pro} openPaywall={() => setPaywall(true)} />}
           {tab === "grocery" && <GroceryScreen items={groceryItems} setItems={setGroceryItems} onAdd={onGroceryAdd} onToggle={onGroceryToggle} />}
           {tab === "insights" && <InsightsScreen live={live} mealLogs={mealLogs} targets={targets} />}
           {tab === "profile" && <ProfileScreen units={units} setUnits={setUnits} weights={weights} setWeights={setWeights} prefs={prefs} setPrefs={setPrefs} pro={pro} openPaywall={() => setPaywall(true)} favorites={favorites} setFavorites={setFavorites} tryList={tryList} setTryList={setTryList} userName={userName} userGoal={userGoal} targetLbs={targetLbs} targets={targets} streak={streak} email={email} onSignOut={onSignOut} onLogWeight={logWeightLbs} onRemoveFavorite={removeFavorite} onRemoveTry={removeTry} theme={theme} onToggleTheme={toggleTheme} />}
@@ -2153,7 +2244,7 @@ function MainApp({ boot, mode, email, onSignOut }) {
         </div>
 
         <BottomNav tab={tab} setTab={setTab} />
-        {paywall && <Paywall onClose={() => setPaywall(false)} onUpgrade={startCheckout} busy={checkoutBusy} />}
+        {paywall && <Paywall onClose={() => setPaywall(false)} onUpgrade={startCheckout} busy={checkoutBusy} error={checkoutError} />}
       </div>
     </>
   );
@@ -2477,13 +2568,16 @@ export default function NutriCookApp() {
   if (!hasSupabase) return <MainApp boot={null} mode="demo" />;
 
   const [phase, setPhase] = useState("loading"); // loading | auth | onboarding | ready
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(undefined);
   const [boot, setBoot] = useState(null);
   const [needName, setNeedName] = useState("");
+  const authVersion = useRef(0);
+  const authUser = useRef(undefined);
 
-  const bootstrap = async sess => {
+  const bootstrap = async (sess, version = ++authVersion.current) => {
     if (!sess) { setPhase("auth"); return; }
     const { data: prof } = await supabase.from("profiles").select("*").maybeSingle();
+    if (version !== authVersion.current) return;
     if (!prof || !prof.onboarded) {
       setNeedName(sess.user?.user_metadata?.name || "");
       setPhase("onboarding");
@@ -2491,28 +2585,58 @@ export default function NutriCookApp() {
     }
     try {
       const data = await db.loadAll();
+      if (version !== authVersion.current) return;
       setBoot(data);
       setPhase("ready");
     } catch {
+      if (version !== authVersion.current) return;
       setBoot({ profile: prof });
       setPhase("ready");
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); bootstrap(data.session); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => {
+    let active = true;
+    let authChanged = false;
+    const receiveSession = sess => {
+      if (!active) return;
+      const userId = sess?.user?.id ?? null;
+      if (authUser.current !== userId) {
+        authVersion.current++;
+        authUser.current = userId;
+        setBoot(null);
+        setPhase(sess ? "loading" : "auth");
+      }
       setSession(sess);
-      if (!sess) { setBoot(null); setPhase("auth"); }
+    };
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => {
+      authChanged = true;
+      receiveSession(sess);
     });
-    return () => sub.subscription.unsubscribe();
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!authChanged) receiveSession(error ? null : data.session);
+    }).catch(() => { if (!authChanged) receiveSession(null); });
+    return () => { active = false; authVersion.current++; sub.subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (session === undefined) return;
+    const version = ++authVersion.current;
+    bootstrap(session, version);
+    return () => { if (authVersion.current === version) authVersion.current++; };
+  }, [session?.user?.id, session === undefined]);
 
   // Theme the pre-app screens (loading / auth / onboarding) to match the OS
   // before MainApp mounts and takes over the data-theme attribute.
   useEffect(() => { if (typeof document !== "undefined" && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = getInitialTheme(); }, []);
 
-  const signOut = async () => { await supabase.auth.signOut(); setBoot(null); setPhase("auth"); };
+  const signOut = async () => {
+    const result = await supabase.auth.signOut();
+    if (result.error) return;
+    authVersion.current++;
+    authUser.current = null;
+    setSession(null); setBoot(null); setPhase("auth");
+  };
 
   if (phase === "loading") return (
     <ErrorBoundary>

@@ -158,9 +158,19 @@ begin
   end loop;
 end $$;
 
--- profiles keys on id, not user_id.
-drop policy if exists own_profile on profiles;
-create policy own_profile on profiles for all
+-- profiles keys on id, not user_id; owners may create/read/update, but not delete.
+drop policy if exists own_profile on public.profiles;
+drop policy if exists own_profile_select on public.profiles;
+drop policy if exists own_profile_insert on public.profiles;
+drop policy if exists own_profile_update on public.profiles;
+
+create policy own_profile_select on public.profiles for select to authenticated
+  using (id = auth.uid());
+
+create policy own_profile_insert on public.profiles for insert to authenticated
+  with check (id = auth.uid());
+
+create policy own_profile_update on public.profiles for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
 
 -- subscriptions + usage_counters: owner may SELECT only. All writes happen through

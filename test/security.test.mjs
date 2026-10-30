@@ -18,6 +18,7 @@ function makeStripeHeader(secret, payload, ts) {
 // Extract signatureValid from stripe-webhook.js and evaluate it in a
 // controlled scope that provides the `crypto` binding it uses.
 import * as nodeCrypto from "node:crypto";
+const NOW = Math.floor(Date.now() / 1000);
 function loadSignatureValid() {
   const src = readFileSync(
     fileURLToPath(new URL("../api/stripe-webhook.js", import.meta.url)), "utf8"
@@ -26,7 +27,7 @@ function loadSignatureValid() {
   assert.ok(match, "signatureValid not found in stripe-webhook.js");
   // new Function runs in a plain (non-module) context; pass node:crypto as
   // the `crypto` parameter so the function body can call crypto.createHmac etc.
-  return new Function("crypto", `${match[0]}; return signatureValid;`)(nodeCrypto);
+  return new Function("crypto", "Date", `${match[0]}; return signatureValid;`)(nodeCrypto, { now: () => NOW * 1000 });
 }
 const sv = loadSignatureValid();
 
@@ -34,7 +35,6 @@ const sv = loadSignatureValid();
 
 const SECRET  = "whsec_test_secret_value";
 const PAYLOAD = '{"type":"checkout.session.completed"}';
-const NOW = Math.floor(Date.now() / 1000);
 
 test("signatureValid: correct signature and fresh timestamp → valid", () => {
   const header = makeStripeHeader(SECRET, PAYLOAD, NOW);
@@ -278,12 +278,23 @@ test("INGREDIENT_DB: no duplicate entries", () => {
 
 // ── generate.js message structure validation ──────────────────────────────────
 
-test("generate.js: rejects message array containing null", () => {
-  assert.match(
-    genSrc,
-    /badMessage.*find|find.*badMessage/s,
-    "generate.js must check individual message objects, not just the array"
-  );
+test("generate.js: rejects message array containing null", async context => {
+  const { default: generate } = await import("../api/generate.js");
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "test-api-key";
+  context.mock.method(globalThis, "fetch", () => assert.fail("Invalid messages must not reach any service"));
+  const response = {
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; },
+  };
+  try {
+    await generate({ method: "POST", headers: {}, body: { messages: [null] } }, response);
+    assert.equal(response.statusCode, 400);
+    assert.equal(typeof response.body.error.message, "string");
+  } finally {
+    if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalKey;
+  }
 });
 
 test("generate.js: validates each message has role and content", () => {
